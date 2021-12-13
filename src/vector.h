@@ -1,21 +1,25 @@
+#pragma once
+
 #include <new>
 #include <memory>
 #include <concepts>
 #include <iostream>
 #include <algorithm>
+#include "common.h"
 
-/**
- * @brief 
- * TODO: add erase, initialize list constructor,
- * 
- */
 namespace algo {
-
+    
+/**
+ * @brief A generic unbounded array
+ * 
+ * @tparam T the type of elements in the array
+ */
 template<typename T>
 class vector {
 public:
     using value_type = T;
     using reference = T&;
+    using const_reference = const T&;
     using pointer = T*;
     using iterator = T*;
     using const_iterator = const T*;
@@ -26,16 +30,10 @@ private:
     value_type* data;
 
     constexpr static const std::size_t DEFAULT_CAPACITY = 4;
-
-    struct deleter {
-        void operator()(T* memory) {
-            ::operator delete(memory);
-        };
-    };
     
     /**
      * @brief Set length, capacity and allocate a raw slab of memory
-     * to the buffer
+     *      to the buffer
      * 
      * @param len the length
      * @param cap the capacity
@@ -53,74 +51,16 @@ private:
         std::size_t new_length = std::min(length, count);
         std::size_t old_length = length;
         T* old_data = data;
-        data = safe_clone(data, data + new_length, count);
+        data = move_construct_safe(data, data + new_length, count);
         capacity = count;
         length = new_length;
         // old buffer must be deallocated no matter what
-        std::unique_ptr<T, deleter> cleaner(old_data, deleter());
+        std::unique_ptr<T, deleter<T> > cleaner(old_data);
         // Call destructor on all elements (some of which have been moved)
         std::destroy(old_data, old_data + old_length);
     }
 
-    /**
-     * @brief Create an array of a given size with the same content as in the
-     * range
-     * 
-     * If the type of the value has a nothrwo move constructor, the content in the
-     * range will be moved
-     * 
-     * @param start the beginning of the range
-     * @param end the end of the range
-     * @param dest_size the size of the clone
-     * @return pointer the clone
-     */
-    pointer safe_clone(T* start, T* end, std::size_t dest_size) {
-        T* dest = static_cast<T*>(::operator new(sizeof(T) * dest_size));
-        std::unique_ptr<T, deleter> cleaner(dest, deleter());
-        if constexpr (std::is_nothrow_move_constructible<T>::value) {
-            std::uninitialized_move(start, end, dest);
-        } else {
-            // If a nothrow move constructor doesn't exist, fall back to copy constructor
-            std::uninitialized_copy(start, end, dest);
-        }
-        cleaner.release();
-        return dest;
-    }
-
-    /**
-     * @brief Construct a copy of a given object on an address
-     * 
-     * The given object is moved if its type has a nothrow move constructor
-     * 
-     * @param pos the address to construct the copy
-     * @param value the object to copy
-     */
-    void safe_construct(T* pos, T& value) {
-        if constexpr (std::is_nothrow_move_constructible<T>::value) {
-            new(pos) T(std::move(value));
-        } else {
-            new(pos) T(value);
-        }
-    }
-
-    /**
-     * @brief Replace the content of an object at a given address with another
-     * object
-     * 
-     * The given object is moved if its type has a nothrow move constructor
-     * 
-     * @param pos the address of the object to assigned to
-     * @param value the object to assigned from
-     */
-    void safe_assign(T* pos, T& value) {
-        if constexpr (std::is_nothrow_move_assignable<T>::value) {
-            *pos = std::move(value);
-        } else {
-            *pos = value;
-        }
-    }
-
-    void insert_move_helper(const_iterator pos, std::size_t distance) {
+    void yield_space(const_iterator pos, std::size_t distance) {
         if (distance == 0) {
             return;
         }
@@ -133,14 +73,18 @@ private:
         if (new_length > capacity) {
             resize_buffer(new_length * 2);
         }
-        for (T* to = data + new_length - 1; to >= data + idx + distance; to--) {
+        std::size_t dest_left_bound = idx + distance;
+        for (T* to = data + new_length - 1; to >= data + dest_left_bound; to--) {
             T* from = to - distance;
             if (to - data < length) {
-                safe_assign(to, *from);
+                move_safe(to, *from);
             } else {
-                safe_construct(to, *from);
+                uninitialized_move_safe(to, *from);
             }
         }
+        // Make sure the yielded space is uninitialized
+        std::size_t clean_right_bound = std::min<std::size_t>(dest_left_bound, length);
+        std::destroy(data + idx, data + clean_right_bound);
     }
 
 
@@ -183,7 +127,7 @@ public:
      * @param n the length of the vector
      * @param value the element to copy
      */
-    vector(std::size_t n, const T& value) requires std::copy_constructible<T> {
+    vector(std::size_t n, const_reference value) requires std::copy_constructible<T> {
         constructor_helper(n, n);
         try {
             // all filled elements will be destroyed when one constructor throws an exception
@@ -235,7 +179,7 @@ public:
      * @param first the beginning of the range
      * @param last the end of the range
      */
-    template<class InputIt>
+    template<typename InputIt>
     vector(InputIt first, InputIt last) : vector() {
         insert(data, first, last);
     }
@@ -247,7 +191,7 @@ public:
      * 
      * @param list the initializer list
      */
-    vector(std::initializer_list<T> list) : vector(list.begin(), list.end()) {}
+    vector(std::initializer_list<value_type> list) : vector(list.begin(), list.end()) {}
 
 
     /**
@@ -258,7 +202,7 @@ public:
      */
     ~vector() {
         // delete even if destructor throws an exception
-        std::unique_ptr<T, deleter> cleaner(data, deleter());
+        std::unique_ptr<T, deleter<T> > cleaner(data);
         std::destroy(data, data + length);
     }
 
@@ -377,69 +321,102 @@ public:
      * 
      * @return an iterator pointing to the inserted value
      */
-    iterator insert(const_iterator pos, const T& value) {
+    iterator insert(const_iterator pos, const_reference value) requires std::copy_constructible<T> {
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
-        insert_move_helper(pos, 1);
+        yield_space(pos, 1);
         // insert value
-        data[idx] = value;
+        new(&data[idx]) T(value);
         length++;
         return data + idx;
     }
 
     /**
      * @brief move a value before pos. The value will be left in an unspecified
-     * state after this operation
+     *      state after this operation
      * 
      * @return iterator the position before which the value will be inserted
      * @param value the value to insert
      * 
      * @return an iterator pointing to the inserted value
      */
-    iterator insert(const_iterator pos, T&& value) {
+    iterator insert(const_iterator pos, value_type&& value) requires std::move_constructible<T> {
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
-        insert_move_helper(pos, 1);
+        yield_space(pos, 1);
         // insert value
-        data[idx] = std::move(value);
+        new(&data[idx]) T(std::move(value));
         length++;
         return data + idx;
     }
 
     /**
      * @brief insert elements from a range before pos. The range is specified
-     * by a pair of iterators
+     *      by a pair of iterators
      * 
-     * @tparam InputIt the type of the input iterator
+     * @tparam InputIt the type of the input iterator, must satisfy the spec
+     *      of std::forward_iterator
      * @param pos the iterator
      * @param first the beginning of the range, pointing to the first element to insert
      * @param last one past the last element to insert
      * @return iterator pointing to the first element inserted, pos if the range is empty 
      */
-    template<typename InputIt>
-    iterator insert(const_iterator pos, InputIt first, InputIt last) {
+    template<std::forward_iterator InputIt>
+    iterator insert(const_iterator pos, InputIt first, InputIt last) requires std::copy_constructible<T> {
         if (first == last) {
             return &data[pos - data];
         }
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
         std::size_t distance = std::distance(first, last);
-        insert_move_helper(pos, distance);
+        yield_space(pos, distance);
         // insert values
         T* to = data + idx;
-        for (InputIt from = first; from != last; from++, to++) {
-            if (to - data < length) {
-                *to = *from;
-            } else {
-                new(to) T(*from);
-            }
-        }
+        std::uninitialized_copy(first, last, to);
         length += distance;
         return data + idx;
     }
 
     /**
-     * @brief erase an element at a position
+     * @brief insert elements from a range before pos. The range is specified
+     *      by a pair of iterators
+     * 
+     * @tparam InputIt the type of the input iterator must satisfy the spec
+     *      of std::input_iterator
+     * @param pos the iterator
+     * @param first the beginning of the range, pointing to the first element to insert
+     * @param last one past the last element to insert
+     * @return iterator pointing to the first element inserted, pos if the range is empty 
+     */
+    template<std::input_iterator InputIt>
+    iterator insert(const_iterator pos, InputIt first, InputIt last) requires std::copy_constructible<T> {
+        if (first == last) {
+            return &data[pos - data];
+        }
+        // get the idx before the iterator is invalidated
+        std::size_t idx = pos - data;
+        std::size_t suffix_length = length - idx;
+
+        T* suffix_copy = move_construct_safe(data + idx, data + length, suffix_length);
+        std::unique_ptr<T, deleter<T> > cleaner(suffix_copy);
+
+        // effectively erase the elements past the point of insertion
+        std::destroy(data + idx, data + length);
+        length = idx;
+
+        // insert values via push_back
+        for (auto& it = first; it != last; it++) {
+            push_back(*it);
+        }
+
+        // insert back those elements that were after the point of insertion
+        insert(data + length, suffix_copy, suffix_copy + suffix_length);
+        std::destroy(suffix_copy, suffix_copy + suffix_length);
+        return data + idx;
+    }
+
+    /**
+     * @brief erase the element at a position
      * 
      * @param pos the position
      * @return iterator to the next element after the erased one.
@@ -447,14 +424,8 @@ public:
      */
     iterator erase(const_iterator pos) {
         int idx = pos - data;
-        if constexpr (std::is_nothrow_move_assignable<T>::value) {
-            std::move(data + idx + 1, data + length, data + idx);
-        } else {
-            // If a nothrow move assignment operator doesn't exist,
-            // fall back to regular assignment operator
-            std::copy(data + idx + 1, data + length, data + idx);
-        }
-        std::destroy_at(data + length);
+        move_safe(data + idx + 1, data + length, data + idx);
+        std::destroy_at(data + length - 1);
         length--;
         if (length < capacity / 4) {
             resize_buffer(capacity / 2);
@@ -479,13 +450,7 @@ public:
         if (first == last) {
             return data + last_idx;
         }
-        if constexpr (std::is_nothrow_move_assignable<T>::value) {
-            std::move(data + last_idx, data + length, data + first_idx);
-        } else {
-            // If a nothrow move assignment operator doesn't exist,
-            // fall back to regular assignment operator
-            std::copy(data + last_idx, data + length, data + first_idx);
-        }
+        move_safe(data + last_idx, data + length, data + first_idx);
         std::destroy(data + first_idx, data + last_idx);
         length -= (last_idx - first_idx);
         if (length < capacity / 4) {
@@ -496,11 +461,11 @@ public:
 
     /**
      * @brief create and append a copy of the given value to the end
-     * of the vector
+     *      of the vector
      * 
      * @param value the value to copy and append
      */
-    void push_back(const T& value) requires std::copy_constructible<T> {
+    void push_back(const_reference value) requires std::copy_constructible<T> {
         // If we are at capacity
         if (length == capacity) {
             resize_buffer(capacity * 2);
@@ -516,7 +481,7 @@ public:
      * 
      * @param value the value to move from
      */
-    void push_back(T&& value) requires std::move_constructible<T> {
+    void push_back(value_type&& value) requires std::move_constructible<T> {
         // If we are at capacity
         if (length == capacity) {
             resize_buffer(capacity * 2);
@@ -527,7 +492,7 @@ public:
 
     /**
      * @brief construct a new element from the arguments and append it to the
-     * end of the container
+     *      end of the container
      * 
      * @tparam Args an variadic type for any combination of arguments
      * @param args the argument used to construct the element
@@ -560,6 +525,8 @@ public:
      * If there are currently more elements than count, only the first count
      * number of elements will be kept. If there are less elements than count,
      * default constructed elements will be appended.
+     *
+     * The capacity is never reduced 
      * 
      * @param count the new size of the container
      */
@@ -574,9 +541,6 @@ public:
             std::uninitialized_default_construct(data + length, data + count);
         } else {
             std::destroy(data + count, data + length);
-            if (count < capacity / 4) {
-                resize_buffer(capacity / 2);
-            }
         }
         length = count;
     }

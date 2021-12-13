@@ -1,7 +1,8 @@
 #include "gtest/gtest.h"
 #include "vector.h"
-#include "constructor_stub.h"
-#include "forward_stub.h"
+#include "utility/constructor_stub.h"
+#include "utility/forward_stub.h"
+#include "utility/stub_iterator.h"
 #include <iostream>
 #include <vector>
 
@@ -11,6 +12,10 @@ namespace {
     protected:
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
+        }
+
+        virtual void TearDown() {
+            EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
         }
     };
 
@@ -24,7 +29,7 @@ namespace {
     static int SMALL_LIMIT = 10;
 
     template<typename T>
-    void test_vec_std_vec_equality(vector<T> vec, std::vector<T> std_vec) {
+    void test_vec_std_vec_equality(vector<T>& vec, std::vector<T>& std_vec) {
         EXPECT_EQ(vec.size(), std_vec.size());
         for (int i = 0; i < vec.size(); i++) {
             EXPECT_EQ(vec[i], std_vec[i]);
@@ -36,6 +41,24 @@ namespace {
         EXPECT_TRUE(vec.empty());
         EXPECT_EQ(constructor_stub::default_constructor_invocation_count, 0);
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 0);
+        EXPECT_EQ(constructor_stub::move_constructor_invocation_count, 0);
+    }
+
+    TEST_F(vector_test, fill_default_constructor_test) {
+        vector<constructor_stub> vec(SMALL_LIMIT);
+        EXPECT_EQ(constructor_stub::default_constructor_invocation_count, SMALL_LIMIT);
+        EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 0);
+        EXPECT_EQ(constructor_stub::move_constructor_invocation_count, 0);
+    }
+
+    TEST_F(vector_test, fill_copy_constructor_test) {
+        constructor_stub stub;
+        vector<constructor_stub> vec(SMALL_LIMIT, stub);
+        for (auto& elem : vec) {
+            EXPECT_EQ(stub, elem);
+        }
+        EXPECT_EQ(constructor_stub::default_constructor_invocation_count, 1);
+        EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, SMALL_LIMIT);
         EXPECT_EQ(constructor_stub::move_constructor_invocation_count, 0);
     }
 
@@ -62,10 +85,8 @@ namespace {
         std::vector<constructor_stub> std_vec(MEDIUM_LIMIT);
         vector<constructor_stub> vec(std_vec.begin(), std_vec.end());
         test_vec_std_vec_equality(vec, std_vec);
-        vec.clear();
-        std_vec.clear();
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
     }
+
     TEST_F(vector_test, initializer_constructor_test) {
         std::vector<int> std_vec{1, 2, 3, 4, 5};
         vector<int> vec{1, 2, 3, 4, 5};
@@ -158,7 +179,7 @@ namespace {
         for (int i = 0; i < LIMIT; i++) {
             vec.pop_back();
         }
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+        
     }
 
     TEST_F(vector_test, push_pop_stress_test) {
@@ -184,7 +205,7 @@ namespace {
             vec_copy.pop_back();
         }
         EXPECT_EQ(vec.size(), 0);
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+        
     }
 
     TEST_F(vector_test, empty_test) {
@@ -278,7 +299,6 @@ namespace {
         }
         vec.clear();
         EXPECT_TRUE(vec.empty());
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
     }
 
     TEST_F(vector_test, insert_single_basic_primitive_test) {
@@ -313,8 +333,6 @@ namespace {
         for (int i = 0; i < SMALL_LIMIT; i++) {
             EXPECT_EQ(vec[i + 1].id, i);
         }
-        vec.clear();
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
     }
 
     TEST_F(vector_test, insert_single_stress_test) {
@@ -328,27 +346,20 @@ namespace {
             vec.insert(vec.begin() + j, SPECIAL_VALUE);
             std_vec.insert(std_vec.begin() + j, SPECIAL_VALUE);
         }
-        test_vec_std_vec_equality(vec, std_vec);
-        vec.clear();
-        std_vec.clear();
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+        test_vec_std_vec_equality(vec, std_vec);        
     }
 
-    TEST_F(vector_test, insert_range_basic_test) {
+    TEST_F(vector_test, insert_range_forward_iterator_basic_test) {
         vector<constructor_stub> vec(SMALL_LIMIT);
         std::vector<constructor_stub> src(SMALL_LIMIT);
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         size_t insert_index = SMALL_LIMIT / 2;
         vec.insert(vec.begin() + insert_index, src.begin(), src.end());
         std_vec.insert(std_vec.begin() + insert_index, src.begin(), src.end());
-        test_vec_std_vec_equality(vec, std_vec);
-        vec.clear();
-        std_vec.clear();
-        src.clear();
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+        test_vec_std_vec_equality(vec, std_vec);        
     }
 
-    TEST_F(vector_test, insert_range_return_value_test) {
+    TEST_F(vector_test, insert_range_forward_iterator_return_value_test) {
         vector<int> vec(SMALL_LIMIT);
         std::vector<int> src(SMALL_LIMIT);
         src[0] = SPECIAL_VALUE;
@@ -359,7 +370,7 @@ namespace {
         EXPECT_EQ(it, vec.begin() + insert_index);
     }
 
-    TEST_F(vector_test, insert_range_stress_test) {
+    TEST_F(vector_test, insert_range_forward_iterator_stress_test) {
         vector<constructor_stub> vec(SMALL_LIMIT);
         std::vector<constructor_stub> src{
             constructor_stub(SPECIAL_VALUE), constructor_stub(~SPECIAL_VALUE),
@@ -372,16 +383,46 @@ namespace {
         test_vec_std_vec_equality(vec, std_vec);
     }
 
+    TEST_F(vector_test, insert_range_input_iterator_basic_test) {
+        vector<constructor_stub> vec(SMALL_LIMIT);
+        std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
+        size_t insert_index = SMALL_LIMIT / 2;
+        vec.insert(vec.begin() + insert_index, stub_iterator<constructor_stub>(SPECIAL_VALUE),
+            stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT));
+        std_vec.insert(std_vec.begin() + insert_index, stub_iterator<constructor_stub>(SPECIAL_VALUE),
+            stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT));
+        test_vec_std_vec_equality(vec, std_vec);
+    }
+
+    TEST_F(vector_test, insert_range_input_iterator_return_value_test) {
+        vector<constructor_stub> vec(SMALL_LIMIT);
+        size_t insert_index = SMALL_LIMIT / 2;
+        vector<constructor_stub>::iterator it = vec.insert(vec.begin() + insert_index,
+            stub_iterator<constructor_stub>(SPECIAL_VALUE),
+            stub_iterator<constructor_stub>(SPECIAL_VALUE + 1));
+        EXPECT_EQ(it -> id, SPECIAL_VALUE);
+        EXPECT_EQ(it, vec.begin() + insert_index);
+    }
+
+    TEST_F(vector_test, insert_range_input_iterator_stress_test) {
+        vector<constructor_stub> vec(SMALL_LIMIT);
+        std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
+        for (int i = 0, pos = 0; i < MEDIUM_LIMIT; i++, pos = (pos + SMALL_PRIME) % vec.size()) {
+            vec.insert(vec.begin() + pos, stub_iterator<constructor_stub>(SPECIAL_VALUE),
+                stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT));
+            std_vec.insert(std_vec.begin() + pos, stub_iterator<constructor_stub>(SPECIAL_VALUE),
+                stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT));
+        }
+        test_vec_std_vec_equality(vec, std_vec);
+    }
+
     TEST_F(vector_test, erase_single_basic_test) {
         vector<constructor_stub> vec(SMALL_LIMIT);
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         int idx = SMALL_LIMIT / 2;
         vec.erase(vec.begin() + idx);
         std_vec.erase(std_vec.begin() + idx);
-        test_vec_std_vec_equality(vec, std_vec);
-        vec.clear();
-        std_vec.clear();
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+        test_vec_std_vec_equality(vec, std_vec);        
     }
 
     TEST_F(vector_test, erase_single_return_value_test) {
@@ -408,9 +449,6 @@ namespace {
             std_vec.erase(std_vec.begin() + j);
         }
         test_vec_std_vec_equality(vec, std_vec);
-        vec.clear();
-        std_vec.clear();
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
     }
 
     TEST_F(vector_test, erase_range_basic_test) {
@@ -421,9 +459,6 @@ namespace {
         vec.erase(vec.begin() + erase_start, vec.begin() + erase_end);
         std_vec.erase(std_vec.begin() + erase_start, std_vec.begin() + erase_end);
         test_vec_std_vec_equality(vec, std_vec);
-        vec.clear();
-        std_vec.clear();
-        EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
     }
 
     TEST_F(vector_test, erase_range_return_value_test) {
@@ -435,6 +470,20 @@ namespace {
             vec.erase(vec.begin() + erase_start, vec.begin() + erase_end);
         EXPECT_EQ(*it, SPECIAL_VALUE);
         EXPECT_EQ(it, vec.begin() + erase_start);
+    }
+
+    TEST_F(vector_test, erase_range_stress_test) {
+        vector<constructor_stub> vec(MEDIUM_LIMIT);
+        std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
+        std::size_t idx = 0;
+        while (!std_vec.empty()) {
+            std::size_t removed_count = std::min<int>(std_vec.size(), SMALL_LIMIT);
+            vec.erase(vec.begin() + idx, vec.begin() + idx + removed_count);
+            std_vec.erase(std_vec.begin() + idx, std_vec.begin() + idx + removed_count);
+            test_vec_std_vec_equality(vec, std_vec);
+            idx = (idx + SMALL_PRIME) % (std_vec.size() + 1);
+        }
+        EXPECT_TRUE(vec.empty());
     }
 
     TEST_F(vector_test, emplace_back_forward_test) {

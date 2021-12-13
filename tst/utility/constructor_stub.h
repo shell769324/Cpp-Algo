@@ -1,3 +1,4 @@
+#pragma once
 namespace algo {
 
 class constructor_stub {
