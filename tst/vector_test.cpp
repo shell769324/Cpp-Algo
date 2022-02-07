@@ -1,9 +1,8 @@
 #include "gtest/gtest.h"
 #include "vector.h"
-#include "utility/constructor_stub.h"
-#include "utility/forward_stub.h"
-#include "utility/stub_iterator.h"
-#include <iostream>
+#include "tst/utility/constructor_stub.h"
+#include "tst/utility/forward_stub.h"
+#include "tst/utility/stub_iterator.h"
 #include <vector>
 
 namespace {
@@ -19,19 +18,19 @@ namespace {
         }
     };
 
-    static int SPECIAL_VALUE = 0xdeadbeef;
-    static int SPECIAL_VALUE2 = 0xbeefbabe;
-    static int BIG_PRIME = 7759;
-    static int MEDIUM_PRIME = 443;
-    static int SMALL_PRIME = 19;
-    static int LIMIT = 10000;
-    static int MEDIUM_LIMIT = 500;
-    static int SMALL_LIMIT = 10;
+    static const int SPECIAL_VALUE = 0xdeadbeef;
+    static const int SPECIAL_VALUE2 = 0xbeefbabe;
+    static const int BIG_PRIME = 7759;
+    static const int MEDIUM_PRIME = 443;
+    static const int SMALL_PRIME = 19;
+    static const int LIMIT = 10000;
+    static const int MEDIUM_LIMIT = 500;
+    static const int SMALL_LIMIT = 10;
 
     template<typename T>
     void test_vec_std_vec_equality(vector<T>& vec, std::vector<T>& std_vec) {
         EXPECT_EQ(vec.size(), std_vec.size());
-        for (int i = 0; i < vec.size(); i++) {
+        for (std::size_t i = 0; i < vec.size(); i++) {
             EXPECT_EQ(vec[i], std_vec[i]);
         }
     }
@@ -194,7 +193,7 @@ namespace {
                 vec_copy.push_back(constructor_stub);
             }
             std::size_t half_size = vec.size() / 2;
-            for (int j = 0; j < half_size; j++) {
+            for (std::size_t j = 0; j < half_size; j++) {
                 vec.pop_back();
                 vec_copy.pop_back();
             }
@@ -276,7 +275,7 @@ namespace {
             src.pop_back();
         }
         std::sort(vec.begin(), vec.end());
-        for (int i = 0; i < vec.size(); i++) {
+        for (std::size_t i = 0; i < vec.size(); i++) {
             EXPECT_EQ(vec[i], i);
         }
     }
@@ -289,6 +288,34 @@ namespace {
         auto const_it = vec.cbegin();
         for (int i = 0; const_it != vec.cend(); i++, const_it++) {
             EXPECT_EQ(i, *const_it);
+        }
+    }
+
+    TEST_F(vector_test, foreach_loop_test) {
+        vector<int> vec;
+        for (int i = 0; i < SMALL_LIMIT; i++) {
+            vec.push_back(i);
+        }
+        for (int& num : vec) {
+            num += 1;
+        }
+        int i = 1;
+        for (int& num : vec) {
+            EXPECT_EQ(num, i);
+            i++;
+        }
+    }
+
+    TEST_F(vector_test, const_foreach_loop_test) {
+        vector<int> vec;
+        for (int i = 0; i < SMALL_LIMIT; i++) {
+            vec.push_back(i);
+        }
+        vector<int> immutable_vec(vec);
+        int i = 0;
+        for (const int& num : vec) {
+            EXPECT_EQ(num, i);
+            i++;
         }
     }
 

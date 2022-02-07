@@ -1,10 +1,8 @@
 #include "gtest/gtest.h"
 #include "stack.h"
-#include "utility/constructor_stub.h"
-#include "utility/forward_stub.h"
-#include <iostream>
+#include "tst/utility/constructor_stub.h"
+#include "tst/utility/forward_stub.h"
 #include <stack>
-#include <vector>
 #include <deque>
 
 
@@ -17,14 +15,10 @@ namespace {
         }
     };
 
-    static int SPECIAL_VALUE = 0xdeadbeef;
-    static int SPECIAL_VALUE2 = 0xbeefbabe;
-    static int BIG_PRIME = 7759;
-    static int MEDIUM_PRIME = 443;
-    static int SMALL_PRIME = 19;
-    static int LIMIT = 10000;
-    static int MEDIUM_LIMIT = 500;
-    static int SMALL_LIMIT = 10;
+    static const int SPECIAL_VALUE = 0xdeadbeef;
+    static const int LIMIT = 10000;
+    static const int MEDIUM_LIMIT = 500;
+    static const int SMALL_LIMIT = 10;
 
     template<typename T>
     std::stack<T> convert_to_std_stack(stack<T>& st) {
@@ -233,7 +227,7 @@ namespace {
                 st_copy.push(constructor_stub);
             }
             std::size_t half_size = st.size() / 2;
-            for (int j = 0; j < half_size; j++) {
+            for (std::size_t j = 0; j < half_size; j++) {
                 st.pop();
                 st_copy.pop();
             }

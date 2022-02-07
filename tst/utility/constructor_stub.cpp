@@ -6,6 +6,7 @@
 namespace algo {
 
 int constructor_stub::default_constructor_invocation_count = 0;
+int constructor_stub::id_constructor_invocation_count = 0;
 int constructor_stub::copy_constructor_invocation_count = 0;
 int constructor_stub::move_constructor_invocation_count = 0;
 int constructor_stub::assignment_operator_invocation_count = 0;
@@ -23,6 +24,7 @@ constructor_stub::constructor_stub() {
 
 constructor_stub::constructor_stub(int id) {
     this -> id = id;
+    id_constructor_invocation_count++;
     constructor_invocation_count++;
 }
 
@@ -52,6 +54,7 @@ constructor_stub& constructor_stub::operator=(constructor_stub&& other) noexcept
 
 void constructor_stub::reset_constructor_destructor_counter() noexcept {
     default_constructor_invocation_count = 0;
+    id_constructor_invocation_count = 0;
     copy_constructor_invocation_count = 0;
     move_constructor_invocation_count = 0;
     assignment_operator_invocation_count = 0;

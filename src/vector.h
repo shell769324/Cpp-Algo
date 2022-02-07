@@ -25,7 +25,9 @@ public:
     using const_iterator = const T*;
 
 private:
+    // The length of the portion of the data array that contain elements
     std::size_t length;
+    // The length of data array
     std::size_t capacity;
     value_type* data;
 
@@ -44,6 +46,14 @@ private:
         data = static_cast<T*>(::operator new(sizeof(T) * cap));
     }
 
+    /**
+     * @brief resize the data buffer
+     * 
+     * If the new capacity is smaller than the current length,
+     * elements beyond capacity will be missing from the new data buffer
+     * 
+     * @param count the new capacity
+     */
     void resize_buffer(std::size_t count) {
         if (capacity == count) {
             return;
@@ -51,7 +61,9 @@ private:
         std::size_t new_length = std::min(length, count);
         std::size_t old_length = length;
         T* old_data = data;
-        data = move_construct_safe(data, data + new_length, count);
+        // Create a clone of the old buffer with move if it is safe
+        // Elements beyond capacity won't make into the new data buffer
+        data = safe_move_construct(data, data + new_length, count);
         capacity = count;
         length = new_length;
         // old buffer must be deallocated no matter what
@@ -60,7 +72,15 @@ private:
         std::destroy(old_data, old_data + old_length);
     }
 
-    void yield_space(const_iterator pos, std::size_t distance) {
+    /**
+     * @brief Make room for elements to insert after a given position
+     * 
+     * Move all elements after the position further back
+     * 
+     * @param pos the position after which space will be created
+     * @param distance how far trailing elements need to push back
+     */
+    void make_room(const_iterator pos, std::size_t distance) {
         if (distance == 0) {
             return;
         }
@@ -76,10 +96,10 @@ private:
         std::size_t dest_left_bound = idx + distance;
         for (T* to = data + new_length - 1; to >= data + dest_left_bound; to--) {
             T* from = to - distance;
-            if (to - data < length) {
-                move_safe(to, *from);
+            if (to - data < (long int) length) {
+                safe_move(to, *from);
             } else {
-                uninitialized_move_safe(to, *from);
+                safe_uninitialized_move(to, *from);
             }
         }
         // Make sure the yielded space is uninitialized
@@ -180,7 +200,7 @@ public:
      * @param last the end of the range
      */
     template<typename InputIt>
-    vector(InputIt first, InputIt last) : vector() {
+    vector(InputIt first, InputIt last) requires std::copy_constructible<T> : vector() {
         insert(data, first, last);
     }
 
@@ -211,6 +231,8 @@ public:
      * 
      * Copy all elements from another vector into this one without modifying it
      * 
+     * Strong exception guarantee
+     * 
      * @param other the vector to copy from
      * @return a reference to itself
      */
@@ -218,6 +240,15 @@ public:
         if (this == &other) {
             return *this;
         }
+
+        if constexpr (std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_destructible_v<T>) {
+            if (capacity <= other.length) {
+                std::destroy(data, data + length);
+                std::copy(other.data, other.data + other.length, data);
+                return *this;
+            }
+        }
+        
         vector tmp(other);
         swap(tmp);
         // tmp will be recycled because it goes out of scope
@@ -249,64 +280,78 @@ public:
     }
 
     /**
-     * @return a reference to the first element in the vector
+     * @brief Get a reference to the first element in the vector
      */
     reference front() const {
         return data[0];
     }
 
     /**
-     * @return a reference to the last element in the vector
+     * @brief Get a reference to the last element in the vector
      */
     reference back() const {
         return data[length - 1];
     }
 
     /**
-     * @return a read/write iterator to the first element
+     * @brief Get an iterator to the first element
      */
     iterator begin() noexcept {
         return data;
     }
 
     /**
-     * @return a read-only iterator to the first element
+     * @brief Get a constant iterator to the first element
+     */
+    const_iterator begin() const noexcept {
+        return data;
+    }
+
+    /**
+     * @brief Get a constant iterator to the first element
      */
     const_iterator cbegin() const noexcept {
         return data;
     }
 
     /**
-     * @return an iterator to one past the last element
+     * @brief Get an iterator to one past the last element
      */
     iterator end() noexcept {
         return data + length;
     }
 
     /**
-     * @return a read-only iterator to one past the last element
+     * @brief Get a constant iterator to one past the last element
+     */
+    const_iterator end() const noexcept {
+        return data + length;
+    }
+
+    /**
+     * @brief Get a constant iterator to one past the last element
      */
     const_iterator cend() const noexcept {
         return data + length;
     }
 
     /**
-     * @return true if the vector is empty, false otherwise
+     * @brief Test if this vector is empty
      */
     bool empty() const noexcept {
         return length == 0;
     }
 
     /**
-     * @return the number of elements in the vector
+     * @brief Get the number of elements in the vector
      */
     size_t size() const noexcept {
         return length;
     }
 
     /**
-     * @brief remove all elements from the vector. The
-     * vector will be empty after this operation
+     * @brief Remove all elements from the vector. The
+     *        vector will be empty after this operation
      */
     void clear() noexcept {
         std::destroy(data, data + length);
@@ -314,7 +359,7 @@ public:
     }
 
     /**
-     * @brief create and insert a copy of value before pos
+     * @brief Create and insert a copy of value before pos
      * 
      * @param pos the iterator the position before which the value will be inserted
      * @param value the value to insert
@@ -324,7 +369,7 @@ public:
     iterator insert(const_iterator pos, const_reference value) requires std::copy_constructible<T> {
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
-        yield_space(pos, 1);
+        make_room(pos, 1);
         // insert value
         new(&data[idx]) T(value);
         length++;
@@ -332,7 +377,7 @@ public:
     }
 
     /**
-     * @brief move a value before pos. The value will be left in an unspecified
+     * @brief Move a value before pos. The value will be left in an unspecified
      *      state after this operation
      * 
      * @return iterator the position before which the value will be inserted
@@ -343,7 +388,7 @@ public:
     iterator insert(const_iterator pos, value_type&& value) requires std::move_constructible<T> {
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
-        yield_space(pos, 1);
+        make_room(pos, 1);
         // insert value
         new(&data[idx]) T(std::move(value));
         length++;
@@ -351,7 +396,7 @@ public:
     }
 
     /**
-     * @brief insert elements from a range before pos. The range is specified
+     * @brief Insert elements from a range before pos. The range is specified
      *      by a pair of iterators
      * 
      * @tparam InputIt the type of the input iterator, must satisfy the spec
@@ -369,7 +414,7 @@ public:
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
         std::size_t distance = std::distance(first, last);
-        yield_space(pos, distance);
+        make_room(pos, distance);
         // insert values
         T* to = data + idx;
         std::uninitialized_copy(first, last, to);
@@ -378,7 +423,7 @@ public:
     }
 
     /**
-     * @brief insert elements from a range before pos. The range is specified
+     * @brief Insert elements from a range before pos. The range is specified
      *      by a pair of iterators
      * 
      * @tparam InputIt the type of the input iterator must satisfy the spec
@@ -397,7 +442,7 @@ public:
         std::size_t idx = pos - data;
         std::size_t suffix_length = length - idx;
 
-        T* suffix_copy = move_construct_safe(data + idx, data + length, suffix_length);
+        T* suffix_copy = safe_move_construct(data + idx, data + length, suffix_length);
         std::unique_ptr<T, deleter<T> > cleaner(suffix_copy);
 
         // effectively erase the elements past the point of insertion
@@ -416,7 +461,7 @@ public:
     }
 
     /**
-     * @brief erase the element at a position
+     * @brief Erase the element at a position
      * 
      * @param pos the position
      * @return iterator to the next element after the erased one.
@@ -424,7 +469,7 @@ public:
      */
     iterator erase(const_iterator pos) {
         int idx = pos - data;
-        move_safe(data + idx + 1, data + length, data + idx);
+        safe_move(data + idx + 1, data + length, data + idx);
         std::destroy_at(data + length - 1);
         length--;
         if (length < capacity / 4) {
@@ -434,7 +479,7 @@ public:
     }
 
     /**
-     * @brief erase all elements in range [first, last)
+     * @brief Erase all elements in a range
      * 
      * If range is empty, this operation is a noop
      * 
@@ -450,7 +495,7 @@ public:
         if (first == last) {
             return data + last_idx;
         }
-        move_safe(data + last_idx, data + length, data + first_idx);
+        safe_move(data + last_idx, data + length, data + first_idx);
         std::destroy(data + first_idx, data + last_idx);
         length -= (last_idx - first_idx);
         if (length < capacity / 4) {
@@ -460,7 +505,7 @@ public:
     }
 
     /**
-     * @brief create and append a copy of the given value to the end
+     * @brief Create and append a copy of the given value to the end
      *      of the vector
      * 
      * @param value the value to copy and append
@@ -475,7 +520,7 @@ public:
     }
 
     /**
-     * @brief move given value to the end of the vector
+     * @brief Move given value to the end of the vector
      * 
      * The value will be left in an unspecified yet valid state
      * 
@@ -491,7 +536,7 @@ public:
     }
 
     /**
-     * @brief construct a new element from the arguments and append it to the
+     * @brief Construct a new element from the arguments and append it to the
      *      end of the container
      * 
      * @tparam Args an variadic type for any combination of arguments
@@ -520,7 +565,7 @@ public:
     }
 
     /**
-     * @brief resize the container.
+     * @brief Resize the container.
      * 
      * If there are currently more elements than count, only the first count
      * number of elements will be kept. If there are less elements than count,
@@ -546,7 +591,7 @@ public:
     }
 
     /**
-     * @brief swap the content with another vector
+     * @brief Swap the content with another vector
      * 
      * @param other the vector to swap with
      */

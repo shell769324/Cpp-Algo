@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.21)
 # Name of the project
 project(star_anise)
 
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+
 set(CMAKE_CXX_STANDARD 20)
 
 include_directories(${PROJECT_NAME} PUBLIC src)

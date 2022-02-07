@@ -4,6 +4,7 @@ namespace algo {
 class constructor_stub {
 public:
     static int default_constructor_invocation_count;
+    static int id_constructor_invocation_count;
     static int copy_constructor_invocation_count;
     static int move_constructor_invocation_count;
     static int assignment_operator_invocation_count;
@@ -33,4 +34,22 @@ public:
 };
 
 bool operator==(const constructor_stub& a, const constructor_stub& b);
+
+struct constructor_stub_key_getter {
+    int operator()(const constructor_stub& stub) const {
+        return stub.id;
+    }
+};
+
+struct constructor_stub_comparator {
+    constructor_stub_comparator() : reverse(false) { }
+
+    constructor_stub_comparator(bool reverse) : reverse(reverse) { }
+
+    bool operator()(const constructor_stub& stub1, const constructor_stub& stub2) const {
+        return (stub1.id < stub2.id) ^ reverse;
+    }
+
+    bool reverse;
+};
 }

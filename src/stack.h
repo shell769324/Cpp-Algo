@@ -3,6 +3,12 @@
 #include "common.h"
 
 namespace algo {
+
+/**
+ * @brief A generic stack
+ * 
+ * @tparam T the type of elements in the stack 
+ */
 template <typename T>
 class stack {
 public:
@@ -12,7 +18,9 @@ public:
     using pointer = T*;
 
 private:
+    // The length of the portion of the data array that contain elements
     std::size_t length;
+    // The length of data array
     std::size_t capacity;
     value_type* data;
 
@@ -31,6 +39,14 @@ private:
         data = static_cast<T*>(::operator new(sizeof(T) * cap));
     }
 
+    /**
+     * @brief resize the data buffer
+     * 
+     * If the new capacity is smaller than the current length,
+     * elements beyond capacity will be missing from the new data buffer
+     * 
+     * @param count the new capacity
+     */
     void resize_buffer(std::size_t count) {
         if (capacity == count) {
             return;
@@ -38,7 +54,9 @@ private:
         std::size_t new_length = std::min(length, count);
         std::size_t old_length = length;
         T* old_data = data;
-        data = move_construct_safe(data, data + new_length, count);
+        // Create a clone of the old buffer with move if it is safe
+        // Elements beyond capacity won't make into the new data buffer
+        data = safe_move_construct(data, data + new_length, count);
         capacity = count;
         length = new_length;
         // old buffer must be deallocated no matter what
