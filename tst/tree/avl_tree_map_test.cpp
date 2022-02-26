@@ -2,6 +2,7 @@
 #include "tree/avl_tree_map.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
+#include "tst/map_test.h"
 #include <iostream>
 
 namespace {
@@ -17,10 +18,8 @@ namespace {
             EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
         }
     };
-}
 
-namespace algo {
-    template class avl_tree_map<int, int, std::less<int> >;
+    using stub_avl_map_type = avl_tree_map<constructor_stub, constructor_stub, constructor_stub_comparator>;
 
-    template class avl_tree_map<constructor_stub, constructor_stub, constructor_stub_comparator>;
+    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree_map_interface, map_test, stub_avl_map_type);
 }

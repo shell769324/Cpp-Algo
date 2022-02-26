@@ -8,6 +8,8 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 
 set(CMAKE_CXX_STANDARD 20)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 include_directories(${PROJECT_NAME} PUBLIC src)
 
 add_subdirectory(src)

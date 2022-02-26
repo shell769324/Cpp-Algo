@@ -18,36 +18,42 @@ int constructor_stub::counter = 0;
 
 constructor_stub::constructor_stub() {
     id = counter++;
+    uid = std::rand();
     default_constructor_invocation_count++;
     constructor_invocation_count++;
 }
 
 constructor_stub::constructor_stub(int id) {
     this -> id = id;
+    uid = std::rand();
     id_constructor_invocation_count++;
     constructor_invocation_count++;
 }
 
 constructor_stub::constructor_stub(const constructor_stub& other) {
     id = other.id;
+    uid = other.uid;
     copy_constructor_invocation_count++;
     constructor_invocation_count++;
 }
 
 constructor_stub::constructor_stub(constructor_stub&& other) noexcept {
     id = other.id;
+    uid = other.uid;
     move_constructor_invocation_count++;
     constructor_invocation_count++;
 }
 
 constructor_stub& constructor_stub::operator=(const constructor_stub& other) {
     id = other.id;
+    uid = other.uid;
     assignment_operator_invocation_count++;
     return *this;
 }
 
 constructor_stub& constructor_stub::operator=(constructor_stub&& other) noexcept {
     id = other.id;
+    uid = other.uid;
     move_assignment_operator_invocation_count++;
     return *this;
 }

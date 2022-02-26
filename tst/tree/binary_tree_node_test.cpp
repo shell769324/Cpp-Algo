@@ -79,6 +79,16 @@ namespace {
         EXPECT_TRUE(node -> is_leaf());
     }
 
+    TEST_F(binary_tree_node_test, is_left_child_test) {
+        std::unique_ptr<node_type> node = std::make_unique<node_type>();
+        node -> left_child = std::make_unique<node_type>();
+        node -> right_child = std::make_unique<node_type>();
+        node -> left_child -> parent = node.get();
+        node -> right_child -> parent = node.get();
+        EXPECT_TRUE(node -> left_child -> is_left_child());
+        EXPECT_FALSE(node -> right_child -> is_left_child());
+    }
+
     TEST_F(binary_tree_node_test, is_leaf_complex_test) {
         std::unique_ptr<node_type> node = std::make_unique<node_type>();
         EXPECT_TRUE(node -> is_leaf());
@@ -101,6 +111,19 @@ namespace {
         EXPECT_EQ(prev_child, nullptr);
     }
 
+    TEST_F(binary_tree_node_test, safe_link_left_child_raw_ptr_test) {
+        node_type* left_child = new node_type();
+        std::unique_ptr<node_type> node = std::make_unique<node_type>();
+        node_type* prev_child = node -> safe_link_left_child(left_child);
+        is_parent_left_child_test(node.get(), left_child);
+        EXPECT_EQ(prev_child, nullptr);
+        prev_child = node -> safe_link_left_child(nullptr);
+        EXPECT_EQ(node -> left_child.get(), nullptr);
+        EXPECT_EQ(left_child -> parent, nullptr);
+        EXPECT_EQ(prev_child, left_child);
+        delete prev_child;
+    }
+
     TEST_F(binary_tree_node_test, link_left_child_raw_ptr_replacing_test) {
         node_type* left_child1 = new node_type();
         std::unique_ptr<node_type> node = std::make_unique<node_type>();
@@ -119,6 +142,19 @@ namespace {
         node_type* prev_child = node -> link_left_child(std::unique_ptr<node_type>(left_child));
         is_parent_left_child_test(node.get(), left_child);
         EXPECT_EQ(prev_child, nullptr);
+    }
+
+    TEST_F(binary_tree_node_test, safe_link_left_child_unique_ptr_test) {
+        node_type* left_child = new node_type();
+        std::unique_ptr<node_type> node = std::make_unique<node_type>();
+        node_type* prev_child = node -> safe_link_left_child(std::unique_ptr<node_type>(left_child));
+        is_parent_left_child_test(node.get(), left_child);
+        EXPECT_EQ(prev_child, nullptr);
+        prev_child = node -> safe_link_left_child(std::unique_ptr<node_type>(nullptr));
+        EXPECT_EQ(node -> left_child.get(), nullptr);
+        EXPECT_EQ(left_child -> parent, nullptr);
+        EXPECT_EQ(prev_child, left_child);
+        delete left_child;
     }
 
     TEST_F(binary_tree_node_test, link_left_child_unique_ptr_replacing_test) {
@@ -141,6 +177,19 @@ namespace {
         EXPECT_EQ(prev_child, nullptr);
     }
 
+    TEST_F(binary_tree_node_test, safe_link_right_child_raw_ptr_test) {
+        node_type* right_child = new node_type();
+        std::unique_ptr<node_type> node = std::make_unique<node_type>();
+        node_type* prev_child = node -> safe_link_right_child(right_child);
+        is_parent_right_child_test(node.get(), right_child);
+        EXPECT_EQ(prev_child, nullptr);
+        prev_child = node -> safe_link_right_child(nullptr);
+        EXPECT_EQ(node -> right_child.get(), nullptr);
+        EXPECT_EQ(right_child -> parent, nullptr);
+        EXPECT_EQ(prev_child, right_child);
+        delete prev_child;
+    }
+
     TEST_F(binary_tree_node_test, link_right_child_raw_ptr_replacing_test) {
         node_type* right_child1 = new node_type();
         std::unique_ptr<node_type> node = std::make_unique<node_type>();
@@ -159,6 +208,19 @@ namespace {
         node_type* prev_child = node -> link_right_child(std::unique_ptr<node_type>(right_child));
         is_parent_right_child_test(node.get(), right_child);
         EXPECT_EQ(prev_child, nullptr);
+    }
+
+    TEST_F(binary_tree_node_test, safe_link_right_child_unique_ptr_test) {
+        node_type* right_child = new node_type();
+        std::unique_ptr<node_type> node = std::make_unique<node_type>();
+        node_type* prev_child = node -> safe_link_right_child(std::unique_ptr<node_type>(right_child));
+        is_parent_right_child_test(node.get(), right_child);
+        EXPECT_EQ(prev_child, nullptr);
+        prev_child = node -> safe_link_right_child(std::unique_ptr<node_type>(nullptr));
+        EXPECT_EQ(node -> right_child.get(), nullptr);
+        EXPECT_EQ(right_child -> parent, nullptr);
+        EXPECT_EQ(prev_child, right_child);
+        delete right_child;
     }
 
     TEST_F(binary_tree_node_test, link_right_child_unique_ptr_replacing_test) {
@@ -183,6 +245,30 @@ namespace {
         is_parent_right_child_test(node.get(), right_child);
         EXPECT_EQ(prev_left_child, nullptr);
         EXPECT_EQ(prev_right_child, nullptr);
+    }
+
+    TEST_F(binary_tree_node_test, safe_link_child_raw_ptr_test) {
+        node_type* left_child = new node_type();
+        node_type* right_child = new node_type();
+        std::unique_ptr<node_type> node = std::make_unique<node_type>();
+        node_type* prev_left_child = node -> safe_link_child(left_child, true);
+        node_type* prev_right_child = node -> safe_link_child(right_child, false);
+        is_parent_left_child_test(node.get(), left_child);
+        is_parent_right_child_test(node.get(), right_child);
+        EXPECT_EQ(prev_left_child, nullptr);
+        EXPECT_EQ(prev_right_child, nullptr);
+        prev_left_child = node -> safe_link_child(nullptr, true);
+        prev_right_child = node -> safe_link_child(nullptr, false);
+        
+        EXPECT_EQ(node -> left_child.get(), nullptr);
+        EXPECT_EQ(left_child -> parent, nullptr);
+        EXPECT_EQ(prev_left_child, left_child);
+
+        EXPECT_EQ(node -> right_child.get(), nullptr);
+        EXPECT_EQ(right_child -> parent, nullptr);
+        EXPECT_EQ(prev_right_child, right_child);   
+        delete prev_left_child;
+        delete prev_right_child;
     }
 
     TEST_F(binary_tree_node_test, link_child_raw_ptr_replacing_test) {
@@ -215,6 +301,31 @@ namespace {
         is_parent_right_child_test(node.get(), right_child);
         EXPECT_EQ(prev_left_child, nullptr);
         EXPECT_EQ(prev_right_child, nullptr);
+    }
+
+    TEST_F(binary_tree_node_test, safe_link_child_unique_ptr_test) {
+        node_type* left_child = new node_type();
+        node_type* right_child = new node_type();
+        std::unique_ptr<node_type> node = std::make_unique<node_type>();
+        node_type* prev_left_child = node -> safe_link_child(std::unique_ptr<node_type>(left_child), true);
+        node_type* prev_right_child = node -> safe_link_child(std::unique_ptr<node_type>(right_child), false);
+        is_parent_left_child_test(node.get(), left_child);
+        is_parent_right_child_test(node.get(), right_child);
+        EXPECT_EQ(prev_left_child, nullptr);
+        EXPECT_EQ(prev_right_child, nullptr);
+
+        prev_left_child = node -> safe_link_child(std::unique_ptr<node_type>(nullptr), true);
+        prev_right_child = node -> safe_link_child(std::unique_ptr<node_type>(nullptr), false);
+        
+        EXPECT_EQ(node -> left_child.get(), nullptr);
+        EXPECT_EQ(left_child -> parent, nullptr);
+        EXPECT_EQ(prev_left_child, left_child);
+
+        EXPECT_EQ(node -> right_child.get(), nullptr);
+        EXPECT_EQ(right_child -> parent, nullptr);
+        EXPECT_EQ(prev_right_child, right_child);   
+        delete prev_left_child;
+        delete prev_right_child;
     }
 
     TEST_F(binary_tree_node_test, link_child_unique_ptr_replacing_test) {
@@ -265,7 +376,7 @@ namespace {
 
     TEST_F(binary_tree_node_test, next_test) {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
-        node_type* curr = root -> get_leftmost_descendant();
+        iterable_node<constructor_stub>* curr = root -> get_leftmost_descendant();
         for (int i = 0; i < SMALL_LIMIT - 1; i++) {
             EXPECT_EQ(curr -> value.id, i);
             curr = curr -> next();
@@ -275,7 +386,7 @@ namespace {
 
     TEST_F(binary_tree_node_test, prev_test) {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
-        node_type* curr = root -> get_rightmost_descendant();
+        iterable_node<constructor_stub>* curr = root -> get_rightmost_descendant();
         for (int i = SMALL_LIMIT - 2; i >= 0; i--) {
             EXPECT_EQ(curr -> value.id, i);
             curr = curr -> prev();

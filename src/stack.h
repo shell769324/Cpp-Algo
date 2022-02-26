@@ -310,5 +310,4 @@ public:
         std::swap(data, other.data);
     }
 };
-
 }

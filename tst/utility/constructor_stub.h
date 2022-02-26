@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 namespace algo {
 
 class constructor_stub {
@@ -15,6 +16,7 @@ public:
 
 
     int id;
+    int uid;
 
     constructor_stub();
 
@@ -47,7 +49,10 @@ struct constructor_stub_comparator {
     constructor_stub_comparator(bool reverse) : reverse(reverse) { }
 
     bool operator()(const constructor_stub& stub1, const constructor_stub& stub2) const {
-        return (stub1.id < stub2.id) ^ reverse;
+        if (reverse) {
+            return stub1.id > stub2.id;
+        }
+        return stub1.id < stub2.id;
     }
 
     bool reverse;

@@ -189,8 +189,23 @@ public:
     /**
      * @brief Get a const reference to the left element of a pair
      */
-    const T& operator()(const std::pair<T, U>& pair) const {
+    const T& operator()(const std::pair<const T, U>& pair) const {
         return pair.first;
+    }
+};
+
+template<typename T>
+class chooser {
+private:
+    bool choose_first;
+public:
+    chooser(bool choose_first=true) : choose_first(choose_first) { }
+
+    /**
+     * @brief Always pick the first or the second value
+     */
+    bool operator()(__attribute__((unused)) const T& value1, __attribute__((unused)) const T& value2) const {
+        return choose_first;
     }
 };
 }

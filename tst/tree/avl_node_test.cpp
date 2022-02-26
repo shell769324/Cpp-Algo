@@ -17,21 +17,22 @@ namespace {
         }
     };
 
-    static const int SPECIAL_VALUE = 0x3e;
+    static const unsigned char SPECIAL_VALUE = 0x3e;
+    static const unsigned char SPECIAL_VALUE2 = 0x2a;
     static const int SMALL_LIMIT = 1 << 4;
 
     using node_type = avl_node<constructor_stub>;
 
-    node_type* make_node(signed char factor) {
+    node_type* make_node(signed char height) {
         node_type* node = new node_type();
-        node -> factor = factor;
+        node -> height = height;
         return node;
     }
 
     
-    TEST_F(avl_node_test, factor_constructor_test) {
+    TEST_F(avl_node_test, default_constructor_test) {
         std::unique_ptr<node_type> node = std::make_unique<node_type>();
-        EXPECT_EQ(node -> factor, 0);
+        EXPECT_EQ(node -> height, 1);
         is_missing_parent_children(node.get());
         EXPECT_EQ(constructor_stub::default_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 0);
@@ -40,7 +41,7 @@ namespace {
 
     TEST_F(avl_node_test, perfect_forwarding_constructor_args_test) {
         std::unique_ptr<node_type> node = std::make_unique<node_type>(SPECIAL_VALUE);
-        EXPECT_EQ(node -> factor, 0);
+        EXPECT_EQ(node -> height, 1);
         EXPECT_EQ(node -> value.id, SPECIAL_VALUE);
         is_missing_parent_children(node.get());
         EXPECT_EQ(constructor_stub::id_constructor_invocation_count, 1);
@@ -52,7 +53,7 @@ namespace {
     TEST_F(avl_node_test, perfect_forwarding_constructor_lvalue_test) {
         constructor_stub stub(SPECIAL_VALUE);
         std::unique_ptr<node_type> node = std::make_unique<node_type>(stub);
-        EXPECT_EQ(node -> factor, 0);
+        EXPECT_EQ(node -> height, 1);
         EXPECT_EQ(node -> value, stub);
         is_missing_parent_children(node.get());
         EXPECT_EQ(constructor_stub::default_constructor_invocation_count, 0);
@@ -62,7 +63,7 @@ namespace {
 
     TEST_F(avl_node_test, perfect_forwarding_constructor_rvalue_test) {
         std::unique_ptr<node_type> node = std::make_unique<node_type>(constructor_stub(SPECIAL_VALUE));
-        EXPECT_EQ(node -> factor, 0);
+        EXPECT_EQ(node -> height, 1);
         EXPECT_EQ(node -> value.id, SPECIAL_VALUE);
         is_missing_parent_children(node.get());
         EXPECT_EQ(constructor_stub::default_constructor_invocation_count, 0);
@@ -72,11 +73,26 @@ namespace {
 
     TEST_F(avl_node_test, clone_test) {
         std::unique_ptr<node_type> node = std::make_unique<node_type>(constructor_stub(SPECIAL_VALUE));
-        node -> factor = 1;
+        node -> height = SPECIAL_VALUE;
         std::unique_ptr<node_type> node_copy(node -> clone());
-        EXPECT_EQ(node -> factor, node_copy -> factor);
+        EXPECT_EQ(node -> height, node_copy -> height);
         EXPECT_EQ(node -> value, node_copy -> value);
         is_missing_parent_children(node_copy.get());
+    }
+
+    TEST_F(avl_node_test, compute_balance_factor_test) {
+        std::unique_ptr<node_type> node = std::make_unique<node_type>(constructor_stub(SPECIAL_VALUE));
+        node -> link_left_child(make_node(SPECIAL_VALUE));
+        node -> link_right_child(make_node(SPECIAL_VALUE2));
+        EXPECT_EQ((int) node -> compute_balance_factor(), (int) SPECIAL_VALUE - SPECIAL_VALUE2);
+    }
+
+    TEST_F(avl_node_test, update_height_test) {
+        std::unique_ptr<node_type> node = std::make_unique<node_type>(constructor_stub(SPECIAL_VALUE));
+        node -> link_left_child(make_node(SPECIAL_VALUE));
+        node -> link_right_child(make_node(SPECIAL_VALUE2));
+        node -> update_height();
+        EXPECT_EQ(node -> height, 1 + std::max(SPECIAL_VALUE, SPECIAL_VALUE2));
     }
 
     void rotate_left_test(bool has_C) {
@@ -90,18 +106,17 @@ namespace {
          *    [C]  E       A  [C]
          */
         node_type* A = new node_type();
-        node_type* B = make_node(-1);
+        node_type* B = make_node(3);
         node_type* C;
-        node_type* D = make_node(-1);
+        node_type* D = make_node(2);
         node_type* E = new node_type();
-        std::unique_ptr<node_type> P = std::make_unique<node_type>();
+        std::unique_ptr<node_type> P(make_node(4));
 
         B -> link_left_child(A);
         B -> link_right_child(D);
         if (has_C) {
             C = new node_type();
             D -> link_left_child(C);
-            D -> factor = 0;
         }
         D -> link_right_child(E);
         P -> link_left_child(B);
@@ -117,12 +132,12 @@ namespace {
         }
         EXPECT_TRUE(E -> is_leaf());
         EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> factor, has_C ? 0 : 1);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_EQ(D -> left_child.get(), B);
-        EXPECT_EQ(D -> factor, 1);
+        EXPECT_EQ(D -> height, 3);
         EXPECT_EQ(D -> right_child.get(), E);
         EXPECT_EQ(P -> left_child.get(), D);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 4);
     }
 
     TEST_F(avl_node_test, rotate_left_full_house_test) {
@@ -144,17 +159,16 @@ namespace {
      */
     void rotate_right_test(bool has_C) {
         node_type* A = new node_type();
-        node_type* B = make_node(1);
+        node_type* B = make_node(2);
         node_type* C;
-        node_type* D = make_node(1);
+        node_type* D = make_node(3);
         node_type* E = new node_type();
-        std::unique_ptr<node_type> P = std::make_unique<node_type>();
+        std::unique_ptr<node_type> P(make_node(4));
 
         B -> link_left_child(A);
         if (has_C) {
             C = new node_type();
             B -> link_right_child(C);
-            B -> factor = 0;
         }
         D -> link_left_child(B);
         D -> link_right_child(E);
@@ -165,17 +179,17 @@ namespace {
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_TRUE(E -> is_leaf());
         EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> factor, -1);
+        EXPECT_EQ(B -> height, 3);
         if (has_C) {
             EXPECT_TRUE(C -> is_leaf());
             EXPECT_EQ(D -> left_child.get(), C);
         } else {
             EXPECT_EQ(D -> left_child.get(), nullptr);
         }
-        EXPECT_EQ(D -> factor, has_C ? 0 : -1);
+        EXPECT_EQ(D -> height, 2);
         EXPECT_EQ(D -> right_child.get(), E);
         EXPECT_EQ(P -> right_child.get(), B);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 4);
     }
 
     TEST_F(avl_node_test, rotate_right_full_house_test) {
@@ -188,17 +202,16 @@ namespace {
 
     void rotate_stress_test(bool has_C) {
         node_type* A = new node_type();
-        node_type* B = make_node(1);
+        node_type* B = make_node(2);
         node_type* C;
-        node_type* D = make_node(1);
+        node_type* D = make_node(3);
         node_type* E = new node_type();
-        std::unique_ptr<node_type> P = std::make_unique<node_type>(0);
+        std::unique_ptr<node_type> P(make_node(4));
 
         B -> link_left_child(A);
         if (has_C) {
             C = new node_type();
             B -> link_right_child(C);
-            B -> factor = 0;
         }
         D -> link_left_child(B);
         D -> link_right_child(E);
@@ -213,17 +226,17 @@ namespace {
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_TRUE(E -> is_leaf());
         EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> factor, -1);
+        EXPECT_EQ(B -> height, 3);
         if (has_C) {
             EXPECT_TRUE(C -> is_leaf());
             EXPECT_EQ(D -> left_child.get(), C);
         } else {
             EXPECT_EQ(D -> left_child.get(), nullptr);
         }
-        EXPECT_EQ(D -> factor, has_C ? 0 : -1);
+        EXPECT_EQ(D -> height, 2);
         EXPECT_EQ(D -> right_child.get(), E);
         EXPECT_EQ(P -> right_child.get(), B);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 4);
     }
 
     TEST_F(avl_node_test, rotate_full_house_stress_test) {
@@ -246,23 +259,24 @@ namespace {
          */
 
         node_type* A = new node_type();
-        node_type* B = make_node(1);
-        node_type* C = make_node(2);
-        std::unique_ptr<node_type> P(new node_type(0));
+        node_type* B = make_node(2);
+        node_type* C = make_node(3);
+        std::unique_ptr<node_type> P(make_node(4));
 
         B -> link_left_child(A);
         C -> link_left_child(B);
         P -> link_left_child(C);
         C -> rebalance_left();
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
         EXPECT_EQ(B -> right_child.get(), C);
-        EXPECT_EQ(B -> factor, 0);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 1);
         EXPECT_EQ(P -> left_child.get(), B);
-        EXPECT_EQ(P -> factor, 0);
+        // Parent height shouldn't change
+        EXPECT_EQ(P -> height, 4);
     }
 
     TEST_F(avl_node_test, rebalance_left_left_complex_test) {
@@ -279,12 +293,12 @@ namespace {
          */
 
         node_type* A = new node_type();
-        node_type* B = make_node(1);
-        node_type* C = make_node(1);
+        node_type* B = make_node(2);
+        node_type* C = make_node(3);
         node_type* D = new node_type();
-        node_type* E = make_node(2);
+        node_type* E = make_node(4);
         node_type* F = new node_type();
-        std::unique_ptr<node_type> P(new node_type(0));
+        std::unique_ptr<node_type> P(make_node(5));
 
         B -> link_left_child(A);
         C -> link_left_child(B);
@@ -294,23 +308,23 @@ namespace {
         P -> link_left_child(E);
         E -> rebalance_left();
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
         EXPECT_EQ(B -> right_child.get(), nullptr);
-        EXPECT_EQ(B -> factor, 1);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_EQ(C -> left_child.get(), B);
         EXPECT_EQ(C -> right_child.get(), E);
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 3);
 
         EXPECT_TRUE(D -> is_leaf());
-        EXPECT_EQ(D -> factor, 0);
+        EXPECT_EQ(D -> height, 1);
         EXPECT_EQ(E -> left_child.get(), D);
         EXPECT_EQ(E -> right_child.get(), F);
-        EXPECT_EQ(E -> factor, 0);
+        EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
-        EXPECT_EQ(F -> factor, 0);
+        EXPECT_EQ(F -> height, 1);
         EXPECT_EQ(P -> left_child.get(), C);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 5);
     }
 
     TEST_F(avl_node_test, rebalance_left_right_basic_test) {
@@ -324,24 +338,24 @@ namespace {
          *        B
          */
 
-        node_type* A = make_node(-1);
+        node_type* A = make_node(2);
         node_type* B = new node_type();
-        node_type* C = make_node(2);
-        std::unique_ptr<node_type> P(new node_type(0));
+        node_type* C = make_node(3);
+        std::unique_ptr<node_type> P(make_node(4));
 
         A -> link_right_child(B);
         C -> link_left_child(A);
         P -> link_left_child(C);
         C -> rebalance_left();
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
         EXPECT_EQ(B -> right_child.get(), C);
-        EXPECT_EQ(B -> factor, 0);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 1);
         EXPECT_EQ(P -> left_child.get(), B);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 4);
     }
 
     TEST_F(avl_node_test, rebalance_left_right_complex_test) {
@@ -358,12 +372,12 @@ namespace {
          */
 
         node_type* A = new node_type();
-        node_type* B = make_node(-1);
+        node_type* B = make_node(3);
         node_type* C = new node_type();
-        node_type* D = make_node(1);
-        node_type* E = make_node(2);
+        node_type* D = make_node(2);
+        node_type* E = make_node(4);
         node_type* F = new node_type();
-        std::unique_ptr<node_type> P(new node_type(0));
+        std::unique_ptr<node_type> P(make_node(5));
 
         B -> link_left_child(A);
         B -> link_right_child(D);
@@ -373,23 +387,23 @@ namespace {
         P -> link_left_child(E);
         E -> rebalance_left();
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
         EXPECT_EQ(B -> right_child.get(), C);
-        EXPECT_EQ(B -> factor, 0);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 1);
 
         EXPECT_EQ(D -> left_child.get(), B);
         EXPECT_EQ(D -> right_child.get(), E);
-        EXPECT_EQ(D -> factor, 0);
+        EXPECT_EQ(D -> height, 3);
         EXPECT_EQ(E -> left_child.get(), nullptr);
         EXPECT_EQ(E -> right_child.get(), F);
-        EXPECT_EQ(E -> factor, -1);
+        EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
-        EXPECT_EQ(F -> factor, 0);
+        EXPECT_EQ(F -> height, 1);
         EXPECT_EQ(P -> left_child.get(), D);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 5);
     }
 
     TEST_F(avl_node_test, rebalance_right_right_basic_test) {
@@ -404,10 +418,10 @@ namespace {
          */
 
 
-        node_type* A = make_node(-2);
-        node_type* B = make_node(-1);
+        node_type* A = make_node(3);
+        node_type* B = make_node(2);
         node_type* C = new node_type();
-        std::unique_ptr<node_type> P(new node_type());
+        std::unique_ptr<node_type> P(make_node(4));
 
         A -> link_right_child(B);    
         B -> link_right_child(C);
@@ -415,14 +429,14 @@ namespace {
         A -> rebalance_right();
 
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
         EXPECT_EQ(B -> right_child.get(), C);
-        EXPECT_EQ(B -> factor, 0);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 1);
         EXPECT_EQ(P -> right_child.get(), B);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 4);
     }
 
     TEST_F(avl_node_test, rebalance_right_right_complex_test) {
@@ -439,12 +453,12 @@ namespace {
          */
 
         node_type* A = new node_type();
-        node_type* B = make_node(-2);
+        node_type* B = make_node(4);
         node_type* C = new node_type();
-        node_type* D = make_node(-1);
-        node_type* E = make_node(-1);
+        node_type* D = make_node(3);
+        node_type* E = make_node(2);
         node_type* F = new node_type();
-        std::unique_ptr<node_type> P(new node_type(0));
+        std::unique_ptr<node_type> P(make_node(5));
 
         B -> link_left_child(A);
         B -> link_right_child(D);
@@ -455,23 +469,23 @@ namespace {
         B -> rebalance_right();
 
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
         EXPECT_EQ(B -> right_child.get(), C);
-        EXPECT_EQ(B -> factor, 0);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 1);
 
         EXPECT_EQ(D -> left_child.get(), B);
         EXPECT_EQ(D -> right_child.get(), E);
-        EXPECT_EQ(D -> factor, 0);
+        EXPECT_EQ(D -> height, 3);
         EXPECT_EQ(E -> right_child.get(), F);
-        EXPECT_EQ(E -> factor, -1);
+        EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
-        EXPECT_EQ(F -> factor, 0);
+        EXPECT_EQ(F -> height, 1);
 
         EXPECT_EQ(P -> right_child.get(), D);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 5);
     }
 
     TEST_F(avl_node_test, rebalance_right_left_basic_test) {
@@ -485,10 +499,10 @@ namespace {
          *        B
          */
 
-        node_type* C = make_node(1);
+        node_type* C = make_node(2);
         node_type* B = new node_type();
-        node_type* A = make_node(-2);
-        std::unique_ptr<node_type> P(new node_type(0));
+        node_type* A = make_node(3);
+        std::unique_ptr<node_type> P(make_node(4));
 
         A -> link_right_child(C);
         C -> link_left_child(B);
@@ -496,14 +510,14 @@ namespace {
         A -> rebalance_right();
 
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
         EXPECT_EQ(B -> right_child.get(), C);
-        EXPECT_EQ(B -> factor, 0);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 1);
         EXPECT_EQ(P -> right_child.get(), B);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 4);
     }
 
     TEST_F(avl_node_test, rebalance_right_left_complex_test) {
@@ -520,12 +534,12 @@ namespace {
          */
 
         node_type* A = new node_type();
-        node_type* B = make_node(-2);
-        node_type* C = make_node(-1);
+        node_type* B = make_node(4);
+        node_type* C = make_node(2);
         node_type* D = new node_type();
-        node_type* E = make_node(1);
+        node_type* E = make_node(3);
         node_type* F = new node_type();
-        std::unique_ptr<node_type> P(new node_type(0));
+        std::unique_ptr<node_type> P(make_node(5));
 
         B -> link_left_child(A);
         B -> link_right_child(E);
@@ -536,21 +550,21 @@ namespace {
         B -> rebalance_right();
 
         EXPECT_TRUE(A -> is_leaf());
-        EXPECT_EQ(A -> factor, 0);
+        EXPECT_EQ(A -> height, 1);
         EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> factor, 1);
+        EXPECT_EQ(B -> height, 2);
         EXPECT_EQ(C -> left_child.get(), B);
         EXPECT_EQ(C -> right_child.get(), E);
-        EXPECT_EQ(C -> factor, 0);
+        EXPECT_EQ(C -> height, 3);
 
         EXPECT_TRUE(D -> is_leaf());
-        EXPECT_EQ(D -> factor, 0);
+        EXPECT_EQ(D -> height, 1);
         EXPECT_EQ(E -> left_child.get(), D);
         EXPECT_EQ(E -> right_child.get(), F);
-        EXPECT_EQ(E -> factor, 0);
+        EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
-        EXPECT_EQ(F -> factor, 0);
+        EXPECT_EQ(F -> height, 1);
         EXPECT_EQ(P -> right_child.get(), C);
-        EXPECT_EQ(P -> factor, 0);
+        EXPECT_EQ(P -> height, 5);
     }
 }

@@ -1,20 +1,33 @@
+
+#pragma once
+#include <vector.h>
+#include <numeric>
+#include <cmath>
+#include <concepts>
+#include "tst/utility/constructor_stub.h"
+#include <unordered_set>
+
 namespace algo {
-    template <class T>
-    constexpr std::string_view type_name() {
-        using namespace std;
-    #ifdef __clang__
-        string_view p = __PRETTY_FUNCTION__;
-        return string_view(p.data() + 34, p.size() - 34 - 1);
-    #elif defined(__GNUC__)
-        string_view p = __PRETTY_FUNCTION__;
-    #  if __cplusplus < 201402
-        return string_view(p.data() + 36, p.size() - 36 - 1);
-    #  else
-        return string_view(p.data() + 49, p.find(';', 49) - 49);
-    #  endif
-    #elif defined(_MSC_VER)
-        string_view p = __FUNCSIG__;
-        return string_view(p.data() + 84, p.size() - 84 - 7);
-    #endif
+
+int random_number(int lo, int hi);
+
+int random_number();
+
+std::vector<constructor_stub> get_random_stub_vector(std::size_t size, int lo = 0, int hi = 10000);
+
+std::vector<std::pair<const constructor_stub, constructor_stub> > get_random_stub_pair_vector(std::size_t size, int lo = 0, int hi = 10000);
+
+std::vector<std::pair<const constructor_stub, constructor_stub> > get_random_stub_pair_vector(std::vector<constructor_stub>& stubs);
+
+class uid_resolver {
+    public:
+    uid_resolver(bool is_choose_smaller=true) : is_choose_smaller(is_choose_smaller) { }
+
+    bool operator()(const constructor_stub& stub1, const constructor_stub& stub2) const {
+        return (stub1.uid < stub2.uid) == is_choose_smaller;
     }
+
+    private:
+    bool is_choose_smaller;
+};
 }

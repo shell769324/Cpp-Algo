@@ -3,6 +3,7 @@
 
 
 namespace algo {
+
 /**
  * @brief Interface for iterable binary tree node
  * 
@@ -106,6 +107,12 @@ public:
      */
     binary_tree_node_base() requires std::default_initializable<T> : parent(nullptr) { }
 
+    /**
+     * @brief Construct a new binary tree node base object with 
+     *        arguments to construct the value
+     * 
+     * @tparam Args the arguments to construct the value
+     */
     template <typename... Args>
     requires (!singleton_pack_decayable_to<binary_tree_node_base, Args...>)
     binary_tree_node_base(Args&&... args) : iterable_node<T>(std::forward<Args>(args)...), parent(nullptr) { }
@@ -114,6 +121,11 @@ public:
     // We should always operate on pointers to node
     binary_tree_node_base(const binary_tree_node_base& other) = delete;
     binary_tree_node_base(binary_tree_node_base&& other) = delete;
+
+    /**
+     * @brief virtual destructor
+     */
+    virtual ~binary_tree_node_base() = default;
 
     /**
      * @brief Get a reference to the underlying node type
@@ -144,17 +156,24 @@ public:
     }
 
     /**
-     * @brief Test if a node has no parent
+     * @brief Test if this node has no parent
      */
     bool is_root() const noexcept {
         return !parent;
     }
 
     /**
-     * @brief Test if a node has no child
+     * @brief Test if this node has no child
      */
     bool is_leaf() const noexcept {
         return !left_child && !right_child;
+    }
+
+    /**
+     * @brief Test if this node is a left_child
+     */
+    bool is_left_child() const noexcept {
+        return parent -> left_child.get() == this;
     }
 
     /**
@@ -188,11 +207,11 @@ public:
     }
 
     /**
-     * @brief Set its left child
+     * @brief Make a nonnull node its left child
      * 
      * Release ownership to the old left child
      * 
-     * @param child a unique ptr to the new left child
+     * @param child a unique ptr to the new left child. Must be nonnull
      * @return the old left child if it exists
      *         nullptr if it doesn't
      */
@@ -204,24 +223,59 @@ public:
     }
 
     /**
-     * @brief Set its left child
+     * @brief Make a node its left child
      * 
      * Release ownership to the old left child
      * 
-     * @param child the new left child
+     * @param child a unique ptr to the new left child. Can be null.
+     * @return the old left child if it exists
+     *         nullptr if it doesn't
+     */
+    Derived* safe_link_left_child(std::unique_ptr<Derived>&& child) noexcept {
+        if (child) {
+            return link_left_child(std::move(child));
+        }
+        return orphan_left_child();
+    }
+
+    /**
+     * @brief Make a nonnull node its left child
+     * 
+     * Release ownership to the old left child
+     * 
+     * @param child the new left child. Must be nonnull
      * @return the old left child if it exists
      *         nullptr if it doesn't
      */
     Derived* link_left_child(Derived* child) noexcept {
+        if (child == left_child.get()) {
+            return child;
+        }
         return link_left_child(std::unique_ptr<Derived>(child));
     }
 
     /**
-     * @brief Set its right child
+     * @brief Make a node its left child
+     * 
+     * Release ownership to the old left child
+     * 
+     * @param child the new left child. This child can be null
+     * @return the old left child if it exists
+     *         nullptr if it doesn't
+     */
+    Derived* safe_link_left_child(Derived* child) noexcept {
+        if (child) {
+            return link_left_child(child);
+        }
+        return orphan_left_child();
+    }
+
+    /**
+     * @brief Make a nonnull node its right child
      * 
      * Release ownership to the old right child
      * 
-     * @param child a unique ptr to the new right child
+     * @param child a unique ptr to the new right child. Must be nonnull
      * @return the old right child if it exists
      *         nullptr if it doesn't
      */
@@ -233,16 +287,51 @@ public:
     }
 
     /**
-     * @brief Set its right child
+     * @brief Make a node its right child
      * 
      * Release ownership to the old right child
      * 
-     * @param child the new right child
+     * @param child a unique ptr to the new right child. Can be null
+     * @return the old right child if it exists
+     *         nullptr if it doesn't
+     */
+    Derived* safe_link_right_child(std::unique_ptr<Derived>&& child) noexcept {
+        if (child) {
+            return link_right_child(std::move(child));
+        }
+        return orphan_right_child();
+    }
+
+    /**
+     * @brief Make a nonnull node its right child
+     * 
+     * Release ownership to the old right child
+     * 
+     * @param child the new right child. Must be nonnull
      * @return the old right child if it exists
      *         nullptr if it doesn't
      */
     Derived* link_right_child(Derived* child) noexcept {
+        if (child == right_child.get()) {
+            return child;
+        }
         return link_right_child(std::unique_ptr<Derived>(child));
+    }
+
+    /**
+     * @brief Make a node its right child
+     * 
+     * Release ownership to the old right child
+     * 
+     * @param child the new right child. This child can be null
+     * @return the old right child if it exists
+     *         nullptr if it doesn't
+     */
+    Derived* safe_link_right_child(Derived* child) noexcept {
+        if (child) {
+            return link_right_child(child);
+        }
+        return orphan_right_child();
     }
 
     /**
@@ -250,7 +339,7 @@ public:
      * 
      * Release ownership to the old child
      * 
-     * @param child a unique pointer to the new child
+     * @param child a unique pointer to the new child. Must be nonnull
      * @param is_left_child setting left child if true, right child otherwise
      * @return the old child if it exists
      *         nullptr if it doesn't
@@ -267,13 +356,56 @@ public:
      * 
      * Release ownership to the old child
      * 
-     * @param child the old child
+     * @param child a unique pointer to the new child. Can be null
+     * @param is_left_child setting left child if true, right child otherwise
+     * @return the old child if it exists
+     *         nullptr if it doesn't
+     */
+    Derived* safe_link_child(std::unique_ptr<Derived>&& child, bool is_left_child) noexcept {
+        if (!child) {
+            if (is_left_child) {
+                return orphan_left_child();
+            }
+            return orphan_right_child();
+        }
+        return link_child(std::move(child), is_left_child);
+    }
+
+    /**
+     * @brief Set its left or right child, depending on a boolean flag
+     * 
+     * Release ownership to the old child
+     * 
+     * @param child the old child. Must be nonnull
      * @param is_left_child setting left child if true, right child otherwise
      * @return the old child if it exists
      *         nullptr if it doesn't
      */
     Derived* link_child(Derived* child, bool is_left_child) noexcept {
-        return link_child(std::unique_ptr<Derived>(child), is_left_child);
+        if (is_left_child) {
+            return link_left_child(child);
+        }
+        return link_right_child(child);
+    }
+
+    /**
+     * @brief Set its left or right child, depending on a boolean flag
+     * 
+     * Release ownership to the old child
+     * 
+     * @param child the old child. Can be null
+     * @param is_left_child setting left child if true, right child otherwise
+     * @return the old child if it exists
+     *         nullptr if it doesn't
+     */
+    Derived* safe_link_child(Derived* child, bool is_left_child) noexcept {
+        if (!child) {
+            if (is_left_child) {
+                return orphan_left_child();
+            }
+            return orphan_right_child();
+        }
+        return link_child(child, is_left_child);
     }
 
     /**
@@ -282,7 +414,7 @@ public:
      * @return the old parent
      */
     Derived* orphan_self() noexcept {
-        if (parent -> left_child.get() == this) {
+        if (is_left_child()) {
             parent -> left_child.release();
         } else {
             parent -> right_child.release();
