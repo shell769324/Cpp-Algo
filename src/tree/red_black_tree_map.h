@@ -1,0 +1,576 @@
+#pragma once
+#include <functional>
+#include "src/common.h"
+#include "red_black_tree.h"
+
+namespace algo {
+template<typename Key, typename T, typename Compare = std::less<Key> >
+class red_black_tree_map {
+
+public:
+    using key_type = Key;
+    using mapped_type = T;
+    using value_type = std::pair<const Key, T>;
+    using key_compare = Compare;
+    using reference = value_type&;
+    using const_reference = const value_type&;
+    using iterator = binary_tree_iterator<value_type>;
+    using const_iterator = binary_tree_iterator<const value_type>;
+    using reverse_iterator = binary_tree_iterator<value_type, true>;
+    using const_reverse_iterator = const binary_tree_iterator<const value_type, true>;
+
+private:
+    using red_black_tree_type = red_black_tree<key_type, value_type, pair_left_accessor<key_type, mapped_type>, Compare>;
+    red_black_tree_type tree;
+
+public:
+    
+    /**
+     * @brief Construct an empty red black tree map with default comparator
+     */
+    red_black_tree_map() = default;
+
+    /**
+     * @brief Construct an empty red black tree map with a given comparator
+     * 
+     * @param comp the key comparator used by the map
+     *             will be copy constructed
+     */
+    red_black_tree_map(const Compare& comp) : tree(comp) { }
+
+    /**
+     * @brief Construct an empty red black tree map with a given comparator
+     * 
+     * @param comp the key comparator used by the tree
+     *             will be move constructed
+     */
+    red_black_tree_map(Compare&& comp) : tree(comp) { }
+
+    /**
+     * @brief Construct a copy of another red black tree map
+     * 
+     * Copy constructor
+     * 
+     * @param other the map to copy from
+     */
+    red_black_tree_map(const red_black_tree_map& other) = default;
+
+    /**
+     * @brief Construct a copy of another red black tree map
+     * 
+     * Move constructor
+     * 
+     * @param other the map to move from
+     */
+    red_black_tree_map(red_black_tree_map&& other) = default;
+
+    /**
+     * @brief Destroy the red black tree map
+     */
+    ~red_black_tree_map() noexcept { } 
+
+    /**
+     * @brief Copy assignment operator
+     * 
+     * @param other the map to copy from
+     * @return a reference to this map
+     */
+    red_black_tree_map& operator=(const red_black_tree_map& other) {
+        if (this == &other) {
+            return *this;
+        }
+        red_black_tree_map tmp(other);
+        swap(tmp);
+        // tmp will be recycled because it goes out of scope
+        return *this;
+    }
+
+    /**
+     * @brief Move assignment operator
+     * 
+     * @param other the map to move from
+     * @return a reference to this map
+     */
+    red_black_tree_map& operator=(red_black_tree_map&& other) noexcept {
+        swap(other);
+        return *this;
+    }
+
+    /**
+     * @brief Construct a new red black tree map from a range
+     * 
+     * @tparam InputIt the type of the iterators that define the range
+     * @param first iterator to the first element in the range
+     * @param last iterator to one past the last element in the range
+     */
+    template<std::input_iterator InputIt>
+    red_black_tree_map(InputIt first, InputIt last) : red_black_tree_map() {
+        insert(first, last);
+    }
+
+    /**
+     * @brief Get the value given a key
+     * 
+     * If the key is not found, an exception is thrown
+     * 
+     * @param key the key associated with the value
+     * @return a reference to value associated with the key
+     */
+    T& at(const key_type& key) {
+        iterator it = tree.find(key);
+        if (it == tree.end()) {
+            throw std::out_of_range("Key not found");
+        }
+        return (*it).second;
+    }
+
+    /**
+     * @brief Get the value given a key
+     * 
+     * If the key is not found, an exception is thrown
+     * 
+     * @param key the key associated with the value
+     * @return a const reference to value associated with the key
+     */
+    const T& at(const key_type& key) const {
+        const_iterator it = tree.find(key);
+        if (it == tree.end()) {
+            throw std::out_of_range("Key not found");
+        }
+        return (*it).second;
+    }
+
+    /**
+     * @brief Get the value given a key
+     * 
+     * If the key is not found, a value is default constructed and inserted
+     * 
+     * @param key the key associated with the value
+     * @return a reference to value associated with the key
+     */
+    T& operator[](const key_type& key) {
+        std::pair<iterator, bool> emplace_result = tree.try_emplace(key, std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple());
+        return (*emplace_result.first).second;
+    }
+    
+    /**
+     * @brief Get the value given a key
+     * 
+     * If the key is not found, a value is default constructed. The
+     * key will be moved and inserted along with the default value.
+     * 
+     * @param key the key associated with the value
+     * @return a reference to value associated with the key
+     */
+    T& operator[](key_type&& key) {
+        std::pair<iterator, bool> emplace_result = tree.try_emplace(key, std::piecewise_construct, std::forward_as_tuple(std::move(key)), std::forward_as_tuple());
+        return (*emplace_result.first).second;
+    }
+
+    /**
+     * @brief Get an iterator to the smallest element
+     */
+    iterator begin() noexcept {
+        return tree.begin();
+    }
+
+    /**
+     * @brief Get a const iterator to the smallest element
+     */
+    const_iterator begin() const noexcept {
+        return tree.begin();
+    }
+
+    /**
+     * @brief Get a const iterator to the smallest element
+     */
+    const_iterator cbegin() const noexcept {
+        return tree.cbegin();
+    }
+
+    /**
+     * @brief Get an iterator to the element following the greatest element
+     */
+    iterator end() noexcept {
+        return tree.end();
+    }
+
+    /**
+     * @brief Get a const iterator to the element following the greatest element
+     */
+    const_iterator end() const noexcept {
+        return tree.end();
+    }
+
+    /**
+     * @brief Get a const iterator to the element following the greatest element
+     */
+    const_iterator cend() const noexcept {
+        return tree.cend();
+    }
+
+    /**
+     * @brief Get a reverse iterator to the greatest element
+     */
+    reverse_iterator rbegin() noexcept {
+        return tree.rbegin();
+    }
+
+    /**
+     * @brief Get a const reverse iterator to the greatest element
+     */
+    const_reverse_iterator rbegin() const noexcept {
+        return tree.rbegin();
+    }
+
+    /**
+     * @brief Get a const reverse iterator to the greatest element
+     */
+    const_reverse_iterator crbegin() const noexcept {
+        return tree.crbegin();
+    }
+
+    /**
+     * @brief Get an iterator to the element before the smallest element
+     */
+    reverse_iterator rend() noexcept {
+        return tree.rend();
+    }
+
+    /**
+     * @brief Get a const iterator to the element before the smallest element
+     */
+    const_reverse_iterator rend() const noexcept {
+        return tree.rend();
+    }
+
+    /**
+     * @brief Get a const iterator to the element before the smallest element
+     */
+    virtual const_reverse_iterator crend() const noexcept {
+        return tree.crend();
+    }
+
+    /**
+     * @brief Test if this map has no elements
+     */
+    [[nodiscard]] bool is_empty() const noexcept {
+        return tree.is_empty();
+    }
+
+    /**
+     * @brief Get the number of elements
+     */
+    [[nodiscard]] std::size_t size() const noexcept {
+        return tree.size();
+    }
+
+    /**
+     * @brief Remove all elements
+     */
+    void clear() noexcept {
+        tree.clear();
+    }
+
+    /**
+     * @brief Insert a key value pair by copy
+     * 
+     * @param value the value to insert
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the inserted pair, or the existing one if this key already exists
+     * 
+     * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
+     */
+    std::pair<iterator, bool> insert(const value_type& value) {
+        return tree.try_emplace(value.first, value);
+    }
+
+    /**
+     * @brief Insert a key value pair by move copy
+     * 
+     * @param value the value to insert
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the inserted pair, or the existing one if this key already exists
+     * 
+     * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
+     */
+    std::pair<iterator, bool> insert(value_type&& value) {
+        return tree.try_emplace(value.first, std::move(value));
+    }
+
+    /**
+     * @brief Insert a key value pair by move copy
+     * 
+     * @tparam P a type that can be converted to value_type
+     * @param value the value used to construct the key value pair
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the inserted pair, or the existing one if this key already exists
+     * 
+     * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
+     */
+    template<typename P>
+    std::pair<iterator, bool> insert(P&& value)
+        requires std::constructible_from<value_type, P> {
+        return tree.emplace(std::forward<P>(value));
+    }
+
+    /**
+     * @brief Insert all key value pairs in a range
+     * 
+     * @tparam InputIt the type of the iterator
+     * @param first an iterator to the first element in the range
+     * @param last an iterator to one past the last element in the range
+     */
+    template <std::input_iterator InputIt>
+    void insert(InputIt first, InputIt last) {
+        tree.insert(first, last);
+    }
+
+    /**
+     * @brief In-place construct and insert a key value pair given the arguments
+     *        to construct it
+     * 
+     * The key value pair is always constructed, regardless if the key already exists
+     * 
+     * @tparam the type of arguments to construct the key value pair
+     * @param args the arguments to construct the key value pair
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the inserted pair, or the existing one if this key already exists
+     * 
+     * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
+     */
+    template <typename... Args>
+    std::pair<iterator, bool> emplace(Args&&... args) {
+        return tree.emplace(std::forward<Args>(args)...);
+    }
+
+    /**
+     * @brief In-place construct and insert a key value pair given the key
+     *        and the arguments to construct the value
+     * 
+     * The key value pair is constructed only if the key is not found
+     * 
+     * @tparam the type of arguments to construct the value
+     * @param args the arguments to construct the value
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the inserted pair, or the existing one if this key already exists
+     * 
+     * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
+     */
+    template <typename... Args>
+    std::pair<iterator, bool> try_emplace(const key_type& key, Args&&... args) {
+        return tree.try_emplace(key, std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(std::forward<Args>(args)...));
+    }
+
+    /**
+     * @brief In-place construct and insert a key value pair given the key
+     *        and the arguments to construct the value
+     * 
+     * The key will be moved to construct the pair
+     * The key value pair is constructed only if the key is not found
+     * 
+     * @tparam the type of arguments to construct the value
+     * @param args the arguments to construct the value
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the inserted pair, or the existing one if this key already exists
+     * 
+     * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
+     */
+    template <typename... Args>
+    std::pair<iterator, bool> try_emplace(key_type&& key, Args&&... args) {
+        return tree.try_emplace(std::move(key), std::piecewise_construct, std::forward_as_tuple(std::move(key)), std::forward_as_tuple(std::forward<Args>(args)...));
+    }
+
+    /**
+     * @brief Remove the key value pair pointed by a given iterator
+     * 
+     * @param pos a iterator that points to the key value pair to remove
+     * @return the iterator to the successor of the removed pair
+     */
+    iterator erase(iterator pos) {
+        return tree.erase(pos);
+    }
+
+    /**
+     * @brief Remove the key value pair pointed by a given iterator
+     * 
+     * @param pos a const iterator that points to the key value pair to remove
+     * @return the iterator to the successor of the removed pair
+     */
+    iterator erase(const_iterator pos) {
+        return tree.erase(pos);
+    }
+
+    /**
+     * @brief Remove all key value pairs in a range
+     * 
+     * @param first the iterator to the first pair in the range
+     * @param last the iterator to one past the last pair in the range
+     * @return the iterator to the successor of the last removed pair
+     */
+    iterator erase(iterator first, iterator last) {
+        return tree.erase(first, last);
+    }
+    
+    /**
+     * @brief Remove the value associated with a given key
+     * 
+     * @param key the key of the value to erase
+     * @return true if removal happened (i.e. the key was found), false otherwise
+     */
+    bool erase(const key_type& key) {
+        return tree.erase(key);
+    }
+
+    /**
+     * @brief Swap content with another tree
+     * 
+     * @param other the tree to swap content with
+     */
+    void swap(red_black_tree_map& other) noexcept(std::is_nothrow_swappable_v<Compare>) {
+        tree.swap(other.tree);
+    }
+    
+    /**
+     * @brief Get the iterator to a key value pair given its key
+     * 
+     * @param key the key to query
+     * @return an iterator to the key value pair if the key is found
+     *         an iterator equivalent to end() otherwise
+     */
+    iterator find(const key_type& key) {
+        return tree.find(key);
+    }
+
+    /**
+     * @brief Get the iterator to a key value pair given its key
+     * 
+     * @param key the key to query
+     * @return a const iterator to the key value pair if the key is found
+     *         a const iterator equivalent to end() otherwise
+     */
+    const_iterator find(const key_type& key) const {
+        return tree.find(key);
+    }
+
+    /**
+     * @brief Test if a key exists
+     * 
+     * @param key the key to query
+     * @return true if the key is found, false otherwise
+     */
+    bool contains(const key_type& key) const {
+        return tree.find(key) != tree.end();
+    }
+
+    /**
+     * @brief Get the iterator to a key value pair that has the
+     *        greatest key less than or equal to a given key
+     * 
+     * @param key the key to query
+     * @return an iterator to such key value pair if it exists
+     *         an iterator equivalent to end() otherwise
+     */
+    iterator max_leq(const key_type& key) {
+        return tree.max_leq(key);
+    }
+
+    /**
+     * @brief Get the iterator to a key value pair that has the
+     *        greatest key less than or equal to a given key
+     * 
+     * @param key the key to query
+     * @return a const iterator to such key value pair if it exists
+     *         a const iterator equivalent to end() otherwise
+     */
+    const_iterator max_leq(const key_type& key) const {
+        return tree.max_leq(key);
+    }
+
+    /**
+     * @brief Get the iterator to a key value pair that has the
+     *        smallest key greater than or equal to a given key
+     * 
+     * @param key the key to query
+     * @return an iterator to such key value pair if it exists
+     *         an iterator equivalent to end() otherwise
+     */
+    iterator min_geq(const key_type& key) {
+        return tree.min_geq(key);
+    }
+
+    /**
+     * @brief Get the iterator to a key value pair that has the
+     *        smallest key greater than or equal to a given key
+     * 
+     * @param key the key to query
+     * @return a const iterator to such key value pair if it exists
+     *         a const iterator equivalent to end() otherwise
+     */
+    const_iterator min_geq(const key_type& key) const {
+        return tree.min_geq(key);
+    }
+
+    /**
+     * @brief Compute the union of two red black tree maps
+     * 
+     * @tparam Resolver a function that resolves conflicts if the key also exists in the map
+     *         It takes in two values and output true if the first value should be picked
+     * @param map1 the first operand of the union operation
+     * @param map2 the second operand of the union operation
+     * @param resolver a conflict resolution function
+     * @return the union of the red black tree maps 
+     */
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree_map union_of(red_black_tree_map map1, red_black_tree_map map2, Resolver resolver=Resolver()) {
+        map1.tree = union_of(std::move(map1.tree), std::move(map2.tree), resolver);
+        return map1;
+    }
+
+    /**
+     * @brief Compute the intersection of two red black tree maps
+     * 
+     * @tparam Resolver a function that resolves conflicts if the key also exists in the map
+     *         It takes in two values and output true if the first value should be picked
+     * @param map1 the first operand of the intersection operation
+     * @param map2 the second operand of the intersection operation
+     * @param resolver a conflict resolution function
+     * @return the intersection of the red black tree maps 
+     */
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree_map intersection_of(red_black_tree_map map1, red_black_tree_map map2, Resolver resolver=Resolver()) {
+        map1.tree = intersection_of(std::move(map1.tree), std::move(map2.tree), resolver);
+        return map1;
+    }
+
+    /**
+     * @brief Compute the difference of two red black tree maps
+     * 
+     * @param map1 the map to subtract from
+     * @param map2 the map that subtracts
+     * @return the difference of the red black tree maps 
+     */
+    friend red_black_tree_map difference_of(red_black_tree_map map1, red_black_tree_map map2) {
+        map1.tree = difference_of(std::move(map1.tree), std::move(map2.tree));
+        return map1;
+    }
+
+    /**
+     * @brief Get the key comparison object
+     */
+    key_compare key_comp() const {
+        return tree.get_comparator();
+    }
+
+    // For testing purpose
+    bool is_valid() const noexcept {
+        return tree.is_valid();
+    }
+};
+}

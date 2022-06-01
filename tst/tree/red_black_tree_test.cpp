@@ -1,10 +1,10 @@
 #include "gtest/gtest.h"
-#include "tree/avl_tree.h"
+#include "tree/red_black_tree.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
 #include "tst/tree/tree_test_util.h"
-#include "tst/utility/common.h"
 #include "tst/tree/tree_bulk_operation_complexity_test.h"
+#include "tst/utility/common.h"
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -18,7 +18,7 @@
 namespace {
     
     using namespace algo;
-    class avl_tree_test : public ::testing::Test {
+    class red_black_tree_test : public ::testing::Test {
     protected:
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
@@ -37,80 +37,47 @@ namespace {
     static const int SMALL_LIMIT = 10;
     static const double HEIGHT_CAP_RATIO = 1.44;
 
-    using int_tree_type = avl_tree<int, constructor_stub, constructor_stub_key_getter>;
-    using stub_tree_type = avl_tree<constructor_stub, constructor_stub, std::identity, constructor_stub_comparator>;
+    using int_tree_type = red_black_tree<int, constructor_stub, constructor_stub_key_getter>;
+    using stub_tree_type = red_black_tree<constructor_stub, constructor_stub, std::identity, constructor_stub_comparator>;
     using stub_node_type = stub_tree_type::node_type;
     using stub_ptr_type = std::unique_ptr<stub_node_type>;
 
-    void is_equal_tree_test(const stub_tree_type& tree1, const stub_tree_type& tree2) {
-        EXPECT_EQ(tree1.size(), tree2.size());
-        for (const constructor_stub& val : tree1) {
-            EXPECT_NE(tree2.find(val), tree2.cend());
-        }
-    }
-
-    template <typename T>
-    std::size_t is_height_correct_helper(avl_node<T>* node) {
-        if (!node) {
-            return 0;
-        }
-        std::size_t left_height = is_height_correct_helper(node -> left_child.get());
-        std::size_t right_height = is_height_correct_helper(node -> right_child.get());
-        std::size_t height_diff;
-        if (left_height < right_height) {
-            height_diff = right_height - left_height;
-        } else {
-            height_diff = left_height - right_height;
-        }
-        // height diff must be <= 1
-        EXPECT_LE(height_diff, 1);
-        char expected_height = std::max(left_height, right_height) + 1;
-        EXPECT_EQ(node -> height, expected_height);
-        return expected_height;
-    }
-
-    void print_stub_node(stub_node_type* node) {
-        if (!node) {
-            return;
-        }
-        print_stub_node(node -> left_child.get());
-        print_stub_node(node -> right_child.get());
-        std::cout << node -> value.id << ": ";
-        if (node -> left_child) {
-            std::cout << node -> left_child -> value.id << " ";
-            if (node -> left_child -> parent != node) {
-                std::cout << "bad left child";
+    void equivalence_test(const stub_tree_type& tree, std::vector<constructor_stub>& stubs) {
+            for (auto& stub : stubs) {
+                EXPECT_EQ(stub, *tree.find(stub));
             }
+            EXPECT_EQ(tree.size(), stubs.size());
         }
-        if (node -> right_child) {
-            std::cout << node -> right_child -> value.id << " ";
-            if (node -> right_child -> parent != node) {
-                std::cout << "bad right child";
-            }
+
+    std::vector<constructor_stub> get_random_number_vector(std::size_t size, int lo = 0, int hi = LIMIT) {
+        std::unordered_set<int> ids;
+        while (ids.size() < size) {
+            ids.insert(random_number(lo, hi));
         }
-        std::cout << std::endl;
+        return std::vector<constructor_stub> (ids.cbegin(), ids.cend());
     }
 
     // Constructor and assignment operator tests
-    TEST_F(avl_tree_test, default_constructor_test) {
+    TEST_F(red_black_tree_test, default_constructor_test) {
         int_tree_type tree;
     }
 
-    TEST_F(avl_tree_test, comparator_constructor_test) {
+    TEST_F(red_black_tree_test, comparator_constructor_test) {
         constructor_stub_comparator comparator(false);
         stub_tree_type tree(comparator);
         stub_tree_type tree2(constructor_stub_comparator(false));
     }
 
-    TEST_F(avl_tree_test, copy_constructor_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, copy_constructor_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree(stubs.cbegin(), stubs.cend());
         stub_tree_type tree_copy(tree);
-        is_equal_tree_test(tree, tree_copy);
+        EXPECT_TRUE(tree_copy.is_valid());
+        equivalence_test(tree_copy, stubs);
     }
 
-    TEST_F(avl_tree_test, move_constructor_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, move_constructor_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree(stubs.cbegin(), stubs.cend());
         stub_tree_type tree_copy(tree);
         int move_constructor_invocation_count = constructor_stub::move_constructor_invocation_count;
@@ -118,19 +85,19 @@ namespace {
         stub_tree_type tree_move(std::move(tree));
         EXPECT_EQ(move_constructor_invocation_count, constructor_stub::move_constructor_invocation_count);
         EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
-        is_equal_tree_test(tree_move, tree_copy);
+        equivalence_test(tree_move, stubs);
     }
 
-    TEST_F(avl_tree_test, copy_assign_operator_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, copy_assign_operator_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree(stubs.cbegin(), stubs.cend());
         stub_tree_type tree_copy;
         tree_copy = tree;
-        is_equal_tree_test(tree, tree_copy);
+        equivalence_test(tree_copy, stubs);
     }
 
-    TEST_F(avl_tree_test, move_assign_operator_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, move_assign_operator_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree(stubs.cbegin(), stubs.cend());
         stub_tree_type tree_copy(tree);
         int move_constructor_invocation_count = constructor_stub::move_constructor_invocation_count;
@@ -139,37 +106,35 @@ namespace {
         tree_move = std::move(tree);
         EXPECT_EQ(move_constructor_invocation_count, constructor_stub::move_constructor_invocation_count);
         EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
-        is_equal_tree_test(tree_move, tree_copy);
+        equivalence_test(tree_move, stubs);
     }
 
-    TEST_F(avl_tree_test, range_constructor_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, range_constructor_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree(stubs.cbegin(), stubs.cend());
-        for (auto& val : stubs) {
-            EXPECT_NE(tree.find(val), tree.cend());
-        }
+        equivalence_test(tree, stubs);
     }
 
-    TEST_F(avl_tree_test, swap_test) {
-        std::vector<constructor_stub> stubs1 = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, swap_test) {
+        std::vector<constructor_stub> stubs1 = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree1(stubs1.cbegin(), stubs1.cend());
         stub_tree_type tree_copy1(tree1);
-        std::vector<constructor_stub> stubs2 = get_random_stub_vector(MEDIUM_LIMIT);
+        std::vector<constructor_stub> stubs2 = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree2(stubs2.cbegin(), stubs2.cend());
         stub_tree_type tree_copy2(tree2);
         std::swap(tree1, tree2);
-        is_equal_tree_test(tree2, tree_copy1);
-        is_equal_tree_test(tree1, tree_copy2);
+        equivalence_test(tree2, stubs1);
+        equivalence_test(tree1, stubs2);
     }
 
     std::size_t compute_max_height(std::size_t height) {
-        return (std::size_t) std::floor(pow((double) height, 1 / HEIGHT_CAP_RATIO));
+        return (std::size_t) std::floor(pow((double) height, 1 / 2));
     }
 
     void join_test(std::size_t left_size, std::size_t right_size, bool has_middle = true) {
-        std::vector<constructor_stub> negative_stubs = get_random_stub_vector(left_size, -LIMIT, 1);
+        std::vector<constructor_stub> negative_stubs = get_random_number_vector(left_size, -LIMIT, 1);
         stub_tree_type left(negative_stubs.begin(), negative_stubs.end());
-        std::vector<constructor_stub> positive_stubs = get_random_stub_vector(right_size, 1, LIMIT);
+        std::vector<constructor_stub> positive_stubs = get_random_number_vector(right_size, 1, LIMIT);
         stub_tree_type right(positive_stubs.begin(), positive_stubs.end());
 
         stub_node_type* left_root = nullptr;
@@ -196,7 +161,8 @@ namespace {
         EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
         EXPECT_EQ(default_constructor_invocation_count, constructor_stub::default_constructor_invocation_count);
         EXPECT_EQ(result -> parent, nullptr);
-        is_height_correct_helper(result.get());
+        EXPECT_TRUE(stub_tree_type::has_no_consecutive_red_nodes_helper(result.get()));
+        EXPECT_TRUE(stub_tree_type::are_all_black_paths_equally_long_helper(result.get()) != -1);
 
         std::sort(negative_stubs.begin(), negative_stubs.end(), constructor_stub_comparator());
         std::sort(positive_stubs.begin(), positive_stubs.end(), constructor_stub_comparator());
@@ -216,43 +182,43 @@ namespace {
         }
     }
 
-    TEST_F(avl_tree_test, join_missing_left_basic_test) {
+    TEST_F(red_black_tree_test, join_missing_left_basic_test) {
         join_test(0, 1);
     }
 
-    TEST_F(avl_tree_test, join_missing_right_basic_test) {
+    TEST_F(red_black_tree_test, join_missing_right_basic_test) {
         join_test(1, 0);
     }
 
-    TEST_F(avl_tree_test, join_basic_test) {
+    TEST_F(red_black_tree_test, join_basic_test) {
         join_test(1, 1);
     }
 
-    TEST_F(avl_tree_test, join_left_taller_test) {
+    TEST_F(red_black_tree_test, join_left_taller_test) {
         join_test(SMALL_LIMIT, compute_max_height(SMALL_LIMIT));
     }
 
-    TEST_F(avl_tree_test, join_missing_left_intermediate_test) {
+    TEST_F(red_black_tree_test, join_missing_left_intermediate_test) {
         join_test(0, SMALL_LIMIT);
     }
 
-    TEST_F(avl_tree_test, join_missing_right_intermediate_test) {
+    TEST_F(red_black_tree_test, join_missing_right_intermediate_test) {
         join_test(SMALL_LIMIT, 0);
     }
 
-    TEST_F(avl_tree_test, join_left_taller_skew_test) {
+    TEST_F(red_black_tree_test, join_left_taller_skew_test) {
         join_test(SMALL_LIMIT, 1);
     }
 
-    TEST_F(avl_tree_test, join_right_taller_test) {
+    TEST_F(red_black_tree_test, join_right_taller_test) {
         join_test(compute_max_height(SMALL_LIMIT), SMALL_LIMIT);
     }
 
-    TEST_F(avl_tree_test, join_right_taller_skew_test) {
+    TEST_F(red_black_tree_test, join_right_taller_skew_test) {
         join_test(1, SMALL_LIMIT);
     }
 
-    TEST_F(avl_tree_test, join_left_taller_stress_test) {
+    TEST_F(red_black_tree_test, join_left_taller_stress_test) {
         int limit = compute_max_height(MEDIUM_LIMIT);
         int skip = MEDIUM_LIMIT / REPEAT;
         for (int i = 0; i < limit; i += skip) {
@@ -260,7 +226,7 @@ namespace {
         }
     }
 
-    TEST_F(avl_tree_test, join_right_taller_stress_test) {
+    TEST_F(red_black_tree_test, join_right_taller_stress_test) {
         int limit = compute_max_height(MEDIUM_LIMIT);
         int skip = MEDIUM_LIMIT / REPEAT;
         for (int i = 0; i < limit; i += skip) {
@@ -268,43 +234,43 @@ namespace {
         }
     }
 
-    TEST_F(avl_tree_test, join_no_middle_missing_left_basic_test) {
+    TEST_F(red_black_tree_test, join_no_middle_missing_left_basic_test) {
         join_test(0, 1, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_missing_right_basic_test) {
+    TEST_F(red_black_tree_test, join_no_middle_missing_right_basic_test) {
         join_test(1, 0, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_basic_test) {
+    TEST_F(red_black_tree_test, join_no_middle_basic_test) {
         join_test(1, 1, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_left_taller_test) {
+    TEST_F(red_black_tree_test, join_no_middle_left_taller_test) {
         join_test(SMALL_LIMIT, compute_max_height(SMALL_LIMIT), false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_missing_left_intermediate_test) {
+    TEST_F(red_black_tree_test, join_no_middle_missing_left_intermediate_test) {
         join_test(0, SMALL_LIMIT, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_missing_right_intermediate_test) {
+    TEST_F(red_black_tree_test, join_no_middle_missing_right_intermediate_test) {
         join_test(SMALL_LIMIT, 0, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_left_taller_skew_test) {
+    TEST_F(red_black_tree_test, join_no_middle_left_taller_skew_test) {
         join_test(SMALL_LIMIT, 1, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_right_taller_test) {
+    TEST_F(red_black_tree_test, join_no_middle_right_taller_test) {
         join_test(compute_max_height(SMALL_LIMIT), SMALL_LIMIT, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_right_taller_skew_test) {
+    TEST_F(red_black_tree_test, join_no_middle_right_taller_skew_test) {
         join_test(1, SMALL_LIMIT, false);
     }
 
-    TEST_F(avl_tree_test, join_no_middle_left_taller_stress_test) {
+    TEST_F(red_black_tree_test, join_no_middle_left_taller_stress_test) {
         int limit = compute_max_height(MEDIUM_LIMIT);
         int skip = MEDIUM_LIMIT / REPEAT;
         for (int i = 0; i < limit; i += skip) {
@@ -312,7 +278,7 @@ namespace {
         }
     }
 
-    TEST_F(avl_tree_test, join_no_middle_right_taller_stress_test) {
+    TEST_F(red_black_tree_test, join_no_middle_right_taller_stress_test) {
         int limit = compute_max_height(MEDIUM_LIMIT);
         int skip = MEDIUM_LIMIT / REPEAT;
         for (int i = 0; i < limit; i += skip) {
@@ -339,24 +305,18 @@ namespace {
         EXPECT_EQ(default_constructor_invocation_count, constructor_stub::default_constructor_invocation_count);
         
         EXPECT_EQ(split_root -> parent, nullptr);
-        is_height_correct_helper(split_root -> left_child.get());
-        is_height_correct_helper(split_root -> right_child.get());
+        EXPECT_TRUE(stub_tree_type::has_no_consecutive_red_nodes_helper(split_root -> left_child.get()));
+        EXPECT_TRUE(stub_tree_type::are_all_black_paths_equally_long_helper(split_root -> left_child.get()) != -1);
+        EXPECT_TRUE(stub_tree_type::has_no_consecutive_red_nodes_helper(split_root -> right_child.get()));
+        EXPECT_TRUE(stub_tree_type::are_all_black_paths_equally_long_helper(split_root -> right_child.get()) != -1);
 
-
-        EXPECT_EQ(split_result.second, has_conflict);
         if (has_conflict) {
             EXPECT_EQ(split_root.get() == node, keep_divider);
         } else {
             EXPECT_EQ(split_root.get(), node);
         }
-        if (split_root -> left_child) {
-            EXPECT_EQ(split_root -> left_child -> parent, nullptr);
-            split_root -> left_child -> parent = split_root.get();
-        }
-        if (split_root -> right_child) {
-            EXPECT_EQ(split_root -> right_child -> parent, nullptr);
-            split_root -> right_child -> parent = split_root.get();
-        }
+        EXPECT_EQ(split_result.second, has_conflict);
+        
         stub_node_type* curr = split_root -> get_leftmost_descendant();
         for (auto it1 = tree.begin(); it1 != tree.end() && curr != nullptr; it1++) {
             if (curr == split_root.get() && ((*it1).id != curr -> value.id)) {
@@ -373,7 +333,7 @@ namespace {
         return split_test(tree, divider, resolver, has_conflict, keep_divider);
     }
 
-    TEST_F(avl_tree_test, split_basic_test) {
+    TEST_F(red_black_tree_test, split_basic_test) {
         std::vector<constructor_stub> stubs;
         stubs.emplace_back(-1);
         stubs.emplace_back(0);
@@ -382,7 +342,7 @@ namespace {
         split_test<uid_resolver>(stubs, stub, uid_resolver(), false);
     }
 
-    TEST_F(avl_tree_test, split_conflict_basic_test) {
+    TEST_F(red_black_tree_test, split_conflict_basic_test) {
         std::vector<constructor_stub> stubs;
         stubs.emplace_back(-1);
         stubs.emplace_back(0);
@@ -391,7 +351,7 @@ namespace {
         split_test<uid_resolver>(stubs, stub, uid_resolver(), true, stub.uid < stubs[1].uid);
     }
 
-    TEST_F(avl_tree_test, split_conflict_symmetric_basic_test) {
+    TEST_F(red_black_tree_test, split_conflict_symmetric_basic_test) {
         std::vector<constructor_stub> stubs;
         stubs.emplace_back(-1);
         stubs.emplace_back(0);
@@ -400,8 +360,8 @@ namespace {
         split_test<uid_resolver>(stubs, stub, uid_resolver(false), true, stub.uid > stubs[1].uid);
     }
 
-    TEST_F(avl_tree_test, split_balanced_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
+    TEST_F(red_black_tree_test, split_balanced_intermediate_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
         int mid_index = copy_stubs.size() / 2;
@@ -409,8 +369,8 @@ namespace {
         split_test<uid_resolver>(stubs, stub, uid_resolver(), false);
     }
 
-    TEST_F(avl_tree_test, split_conflict_balanced_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
+    TEST_F(red_black_tree_test, split_conflict_balanced_intermediate_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
         int mid_index = copy_stubs.size() / 2;
@@ -418,16 +378,16 @@ namespace {
         split_test<uid_resolver>(stubs, stub, uid_resolver(), true, stub.uid < copy_stubs[mid_index].uid);
     }
     
-    TEST_F(avl_tree_test, split_left_empty_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
+    TEST_F(red_black_tree_test, split_left_empty_intermediate_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
         constructor_stub stub(copy_stubs[0].id - 1);
         split_test<uid_resolver>(stubs, stub, uid_resolver(), false);
     }
 
-    TEST_F(avl_tree_test, split_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(11);
+    TEST_F(red_black_tree_test, split_intermediate_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(11);
         stub_tree_type tree(stubs.begin(), stubs.end());
 
         std::vector<constructor_stub> copy_stubs(stubs);
@@ -440,8 +400,8 @@ namespace {
         }
     }
 
-    TEST_F(avl_tree_test, split_conflict_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
+    TEST_F(red_black_tree_test, split_conflict_intermediate_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
         stub_tree_type tree(stubs.begin(), stubs.end());
 
         std::vector<constructor_stub> copy_stubs(stubs);
@@ -452,8 +412,8 @@ namespace {
         }
     }
 
-    TEST_F(avl_tree_test, split_stress_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, split_stress_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(MEDIUM_LIMIT);
         stub_tree_type tree(stubs.begin(), stubs.end());
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
@@ -466,8 +426,8 @@ namespace {
         }
     }
 
-    TEST_F(avl_tree_test, split_conflict_stress_test) {
-        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+    TEST_F(red_black_tree_test, split_conflict_stress_test) {
+        std::vector<constructor_stub> stubs = get_random_number_vector(MEDIUM_LIMIT);
         stub_tree_type tree(stubs.begin(), stubs.end());
 
         std::vector<constructor_stub> copy_stubs(stubs);
@@ -479,6 +439,6 @@ namespace {
         }
     }
 
-    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree_bulk_operation_complexity, tree_bulk_operation_complexity_test,
+    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree_bulk_operation_complexity, tree_bulk_operation_complexity_test,
         stub_tree_type);
 }

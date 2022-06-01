@@ -179,6 +179,9 @@ public:
     template <typename K, typename V, typename KeyOf, typename Comparator>
     friend class avl_tree;
 
+    template <typename K, typename V, typename KeyOf, typename Comparator>
+    friend class red_black_tree;
+
     // const and non-const iterator of the same base type are friends
     friend std::conditional<std::is_const_v<T>, binary_tree_iterator<non_const_T, Reverse>, void>::type;
     friend std::conditional<(!std::is_const_v<T>), binary_tree_iterator<const T, Reverse>, void>::type;

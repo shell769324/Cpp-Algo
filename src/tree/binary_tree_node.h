@@ -419,7 +419,17 @@ public:
         } else {
             parent -> right_child.release();
         }
-        return parent = nullptr;
+        Derived* saved_parent = parent;
+        parent = nullptr;
+        return saved_parent;
+    }
+
+    Derived* get_root() noexcept {
+        Derived* curr = underlying_ptr();
+        while (curr -> parent) {
+            curr = curr -> parent;
+        }
+        return curr;
     }
 
     /**
@@ -490,6 +500,70 @@ public:
             curr = curr -> parent;
         }
         return curr -> parent;
+    }
+
+    /**
+     * @brief Perform a left rotation on the current node
+     * 
+     * @return the node in place of this node
+     */
+    Derived* rotate_left() noexcept {
+        /*
+         *     P               P
+         *     |(1)            |(1)
+         *     B               D
+         *    / \(2)       (2)/ \
+         *   A   D     ->    B   E
+         *   (3)/ \         / \(3)
+         *     C   E       A   C
+         */
+        Derived* original_right_child = orphan_right_child();
+        Derived* right_child_left_child = original_right_child -> left_child.release();
+        // (1) Let right child be the new child of the parent of this node
+        // Ownership transfer. Parent releases ownership of pointer to this node
+        if (parent) {
+            parent -> link_child(original_right_child, is_left_child());
+        }
+        // (2) Make this node the left child of the original right child
+        original_right_child -> link_left_child(underlying_ptr());
+        // (3) If the original right child has a left child, 
+        // make it the right child of this node
+        if (right_child_left_child) {
+            link_right_child(right_child_left_child);
+        }
+        return original_right_child;
+    }
+
+    /**
+     * @brief Perform a right rotation on the current node
+     * 
+     * @return Derived* the node in place of this node
+     */
+    Derived* rotate_right() noexcept {
+        /*
+         *      P               P
+         *      |(1)            |(1)
+         *      D               B
+         *  (2)/ \             / \(2)
+         *    B   E     ->    A   D
+         *   / \(3)           (3)/ \
+         *  A   C               C   E
+         */
+        Derived* original_left_child = orphan_left_child();
+        Derived* left_child_right_child = original_left_child -> right_child.release();
+        // (1) Let right child be the new child of the parent of this node
+        // Ownership transfer. Parent releases ownership of pointer to this node
+        if (parent) {
+            parent -> link_child(original_left_child, is_left_child());
+        }
+        // (2) Make this node the left child of the original right child
+        original_left_child -> link_right_child(underlying_ptr());
+        // (3) If the original right child has a left child, 
+        // make it the right child of this node
+        if (left_child_right_child) {
+            link_left_child(left_child_right_child);
+        }
+        return original_left_child;
     }
 
     /**

@@ -1117,5 +1117,5 @@ namespace {
         difference_of_intermediate_test,
         difference_of_stress_test,
         mixed_stress_test
-        );
+    );
 }

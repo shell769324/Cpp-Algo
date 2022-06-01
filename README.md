@@ -13,8 +13,8 @@ The project is built using CMake 3.21. Implementations go into `src` directory a
 |------------|-------------|-------------|
 | Vector and stack | Generic vector and stack with strong exception guarantee and memory optimization | Complete |
 | AVL tree | Generic AVL tree that provides an easy ordered map and ordered set implementation | Complete |
-| Red black tree | Generic red black tree that provides an easy ordered map and ordered set implementation | Next |
-| Augmented tree plugin | A plugin class that allows augmentation for any binary trees | Milestone 4 |
+| Red black tree | Generic red black tree that provides an easy ordered map and ordered set implementation | Complete |
+| Augmented tree plugin | A plugin class that allows augmentation for any binary trees | Next |
 | Splay tree |  | Milestone 5 |
 | Treap | | Milestone 6 |
 | Performance tuning | Performance Benchmark for all tree implementations and memory allocation improvement | Milestone 7 |
