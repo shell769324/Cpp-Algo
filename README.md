@@ -1,4 +1,4 @@
-# Star Anise
+# Cpp Algo
 Generic C++ containers and algorithms
 
 ## Overview
