@@ -2,6 +2,7 @@
 #include <functional>
 #include "src/common.h"
 #include "avl_tree.h"
+#include "src/thread_pool_executor/thread_pool_executor.h"
 
 namespace algo {
 template<typename Key, typename T, typename Compare = std::less<Key> >
@@ -528,8 +529,16 @@ public:
      * @return the union of the avl tree maps 
      */
     template<typename Resolver=chooser<value_type> >
-    friend avl_tree_map union_of(avl_tree_map map1, avl_tree_map map2, Resolver resolver=Resolver()) {
+    friend avl_tree_map union_of(avl_tree_map map1, avl_tree_map map2, Resolver resolver=Resolver())
+        requires is_resolver<value_type, Resolver> {
         map1.tree = union_of(std::move(map1.tree), std::move(map2.tree), resolver);
+        return map1;
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree_map union_of(avl_tree_map map1, avl_tree_map map2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver>  {
+        map1.tree = union_of(std::move(map1.tree), std::move(map2.tree), executor, resolver);
         return map1;
     }
 
@@ -544,8 +553,16 @@ public:
      * @return the intersection of the avl tree maps 
      */
     template<typename Resolver=chooser<value_type> >
-    friend avl_tree_map intersection_of(avl_tree_map map1, avl_tree_map map2, Resolver resolver=Resolver()) {
+    friend avl_tree_map intersection_of(avl_tree_map map1, avl_tree_map map2, Resolver resolver=Resolver())
+        requires is_resolver<value_type, Resolver> {
         map1.tree = intersection_of(std::move(map1.tree), std::move(map2.tree), resolver);
+        return map1;
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree_map intersection_of(avl_tree_map map1, avl_tree_map map2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver> {
+        map1.tree = intersection_of(std::move(map1.tree), std::move(map2.tree), executor, resolver);
         return map1;
     }
 
@@ -558,6 +575,11 @@ public:
      */
     friend avl_tree_map difference_of(avl_tree_map map1, avl_tree_map map2) {
         map1.tree = difference_of(std::move(map1.tree), std::move(map2.tree));
+        return map1;
+    }
+
+    friend avl_tree_map difference_of(avl_tree_map map1, avl_tree_map map2, thread_pool_executor& executor) {
+        map1.tree = difference_of(std::move(map1.tree), std::move(map2.tree), executor);
         return map1;
     }
 

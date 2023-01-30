@@ -6,6 +6,7 @@ file(GLOB_RECURSE TEST_SOURCES LIST_DIRECTORIES false
     utility/*
     vector_test.cpp
     stack_test.cpp
+    deque_test.cpp
     map_test.h
     set_test.h
     tree/tree_test_util.*
@@ -18,6 +19,8 @@ file(GLOB_RECURSE TEST_SOURCES LIST_DIRECTORIES false
     tree/red_black_tree_test.cpp
     tree/red_black_tree_set_test.cpp
     tree/red_black_tree_map_test.cpp
+    thread_pool_executor/thread_pool_executor_test.cpp
+    tree/binary_indexed_tree_test.cpp
     main.cpp)
 
 set(SOURCES ${TEST_SOURCES})

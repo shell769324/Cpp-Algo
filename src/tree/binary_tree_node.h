@@ -179,12 +179,16 @@ public:
     /**
      * @brief Remove its left child if it exists
      * 
+     * @tparam NullSafe true if this node may not have a left child
      * @return the pointer to the left child if it exists
      *         nullptr if it doesn't have left child
      */
+    template <bool NullSafe=true>
     Derived* orphan_left_child() noexcept {
-        if (!left_child) {
-            return nullptr;
+        if constexpr (NullSafe) {
+            if (!left_child) {
+                return nullptr;
+            }
         }
         Derived* old_child = left_child.release();
         old_child -> parent = nullptr;
@@ -194,12 +198,16 @@ public:
     /**
      * @brief Remove its right child if it exists
      * 
+     * @tparam NullSafe true if this node may not have a right child
      * @return the pointer to the right child if it exists
      *         nullptr if it doesn't
      */
+    template <bool NullSafe=true>
     Derived* orphan_right_child() noexcept {
-        if (!right_child) {
-            return nullptr;
+        if constexpr (NullSafe) {
+            if (!right_child) {
+                return nullptr;
+            }
         }
         Derived* old_child = right_child.release();
         old_child -> parent = nullptr;
@@ -517,7 +525,7 @@ public:
          *   (3)/ \         / \(3)
          *     C   E       A   C
          */
-        Derived* original_right_child = orphan_right_child();
+        Derived* original_right_child = orphan_right_child<false>();
         Derived* right_child_left_child = original_right_child -> left_child.release();
         // (1) Let right child be the new child of the parent of this node
         // Ownership transfer. Parent releases ownership of pointer to this node
@@ -549,7 +557,7 @@ public:
          *   / \(3)           (3)/ \
          *  A   C               C   E
          */
-        Derived* original_left_child = orphan_left_child();
+        Derived* original_left_child = orphan_left_child<false>();
         Derived* left_child_right_child = original_left_child -> right_child.release();
         // (1) Let right child be the new child of the parent of this node
         // Ownership transfer. Parent releases ownership of pointer to this node

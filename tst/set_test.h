@@ -37,6 +37,8 @@ namespace {
 
     template <typename T>
     class set_test : public testing::Test {
+        public:
+        thread_pool_executor executor;
         protected:
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
@@ -199,11 +201,16 @@ namespace {
         }
 
         template<typename Resolver>
-        static void union_of_test_template(const T& set1, const T& set2, Resolver resolver) {
+        void union_of_test_template(const T& set1, const T& set2, Resolver resolver, bool is_parallel=false) {
             T set_copy1(set1);
             T set_copy2(set2);
+            T set;
             mark_constructor_counts();
-            T set = union_of<Resolver>(std::move(set_copy1), std::move(set_copy2), resolver);
+            if (is_parallel) {
+                set = union_of<Resolver>(std::move(set_copy1), std::move(set_copy2), this -> executor, resolver);
+            } else {
+                set = union_of<Resolver>(std::move(set_copy1), std::move(set_copy2), resolver);
+            }
             check_constructor_counts();
             EXPECT_TRUE(set.is_valid());
             // No element is missing
@@ -232,11 +239,16 @@ namespace {
         }
 
         template<typename Resolver>
-        void intersection_of_test_template(const T& set1, const T& set2, Resolver resolver) {
+        void intersection_of_test_template(const T& set1, const T& set2, Resolver resolver, bool is_parallel=false) {
             T set_copy1(set1);
             T set_copy2(set2);
+            T set;
             mark_constructor_counts();
-            T set = intersection_of<Resolver>(std::move(set_copy1), std::move(set_copy2), resolver);
+            if (is_parallel) {
+                set = intersection_of<Resolver>(std::move(set_copy1), std::move(set_copy2), this -> executor, resolver);
+            } else {
+                set = intersection_of<Resolver>(std::move(set_copy1), std::move(set_copy2), resolver);
+            }
             check_constructor_counts();
             EXPECT_TRUE(set.is_valid());
             // No extraneous elements
@@ -258,11 +270,16 @@ namespace {
             }
         }
 
-        static void difference_of_test_template(const T& set1, const T& set2) {
+        void difference_of_test_template(const T& set1, const T& set2, bool is_parallel=false) {
             T set_copy1(set1);
             T set_copy2(set2);
+            T set;
             mark_constructor_counts();
-            T set = difference_of(std::move(set_copy1), std::move(set_copy2));
+            if (is_parallel) {
+                set = difference_of(std::move(set_copy1), std::move(set_copy2), this -> executor);
+            } else {
+                set = difference_of(std::move(set_copy1), std::move(set_copy2));
+            }
             check_constructor_counts();
             EXPECT_TRUE(set.is_valid());
             // No extraneous elements
@@ -640,12 +657,28 @@ namespace {
         this -> union_of_test_template(set1, set2, uid_resolver());
     }
 
+    TYPED_TEST_P(set_test, union_of_basic_parallel_test) {
+        TypeParam set1;
+        set1.emplace(1);
+        TypeParam set2;
+        set2.emplace(2);
+        this -> union_of_test_template(set1, set2, uid_resolver(), true);
+    }
+
     TYPED_TEST_P(set_test, union_of_conflict_basic_test) {
         TypeParam set1;
         set1.emplace(1);
         TypeParam set2;
         set2.emplace(1);
         this -> union_of_test_template(set1, set2, uid_resolver());
+    }
+
+    TYPED_TEST_P(set_test, union_of_conflict_basic_parallel_test) {
+        TypeParam set1;
+        set1.emplace(1);
+        TypeParam set2;
+        set2.emplace(1);
+        this -> union_of_test_template(set1, set2, uid_resolver(), true);
     }
 
     TYPED_TEST_P(set_test, union_of_empty_test) {
@@ -661,6 +694,13 @@ namespace {
         TypeParam set1(stubs.begin(), stubs.begin() + SMALL_LIMIT / 2);
         TypeParam set2(stubs.begin() + SMALL_LIMIT / 2, stubs.end());
         this -> union_of_test_template(set1, set2, uid_resolver());
+    }
+
+    TYPED_TEST_P(set_test, union_of_intermediate_parallel_test) {
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        TypeParam set1(stubs.begin(), stubs.begin() + SMALL_LIMIT / 2);
+        TypeParam set2(stubs.begin() + SMALL_LIMIT / 2, stubs.end());
+        this -> union_of_test_template(set1, set2, uid_resolver(), true);
     }
     
     TYPED_TEST_P(set_test, union_of_conflict_intermediate_test) {
@@ -687,6 +727,21 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(set_test, union_of_stress_parallel_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        TypeParam set1;
+        TypeParam set2;
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (unsigned i = 0; i < stubs.size() / 2; i++) {
+            set1.insert(stubs[i]);
+            unsigned reverse_index = stubs.size() - 1 - i;
+            set2.insert(stubs[reverse_index]);
+            if (i % skip == 0) {
+                this -> union_of_test_template(set1, set2, uid_resolver(), true);
+            }
+        }
+    }
+
     TYPED_TEST_P(set_test, union_of_conflict_stress_test) {
         auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
         unsigned share_start = stubs.size() / 3;
@@ -704,6 +759,23 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(set_test, union_of_conflict_stress_parallel_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        unsigned share_start = stubs.size() / 3;
+        unsigned share_end = stubs.size() - stubs.size() / 3;
+        TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
+        TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+            set1.insert(stubs[i]);
+            unsigned reverse_index = stubs.size() - 1 - i;
+            set2.insert(stubs[reverse_index]);
+            if (i % skip == 0) {
+                this -> union_of_test_template(set1, set2, uid_resolver(), true);
+            }
+        }
+    }
+
     TYPED_TEST_P(set_test, intersection_of_basic_test) {
         TypeParam set1;
         set1.emplace(0);
@@ -712,6 +784,16 @@ namespace {
         set2.emplace(0);
         set2.emplace(2);
         this -> intersection_of_test_template(set1, set2, uid_resolver());
+    }
+
+    TYPED_TEST_P(set_test, intersection_of_basic_parallel_test) {
+        TypeParam set1;
+        set1.emplace(0);
+        set1.emplace(1);
+        TypeParam set2;
+        set2.emplace(0);
+        set2.emplace(2);
+        this -> intersection_of_test_template(set1, set2, uid_resolver(), true);
     }
 
     TYPED_TEST_P(set_test, intersection_of_empty_test) {
@@ -739,6 +821,22 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(set_test, intersection_of_intermediate_parallel_test) {
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        unsigned share_start = stubs.size() / 3;
+        unsigned share_end = stubs.size() - stubs.size() / 3;
+        TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
+        TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
+        unsigned skip = std::max<int>(1, stubs.size() / REPEAT);
+        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+            set1.insert(stubs[i]);
+            set2.insert(stubs[stubs.size() - 1 - i]);
+            if (i % skip == 0) {
+                this -> intersection_of_test_template(set1, set2, uid_resolver(), true);
+            }
+        }
+    }
+
     TYPED_TEST_P(set_test, intersection_of_stress_test) {
         auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
         unsigned share_start = stubs.size() / 3;
@@ -755,6 +853,22 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(set_test, intersection_of_stress_parallel_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        unsigned share_start = stubs.size() / 3;
+        unsigned share_end = stubs.size() - stubs.size() / 3;
+        TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
+        TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+            set1.insert(stubs[i]);
+            set2.insert(stubs[stubs.size() - 1 - i]);
+            if (i % skip == 0) {
+                this -> intersection_of_test_template(set1, set2, uid_resolver(), true);
+            }
+        }
+    }
+
     TYPED_TEST_P(set_test, difference_of_basic_test) {
         TypeParam set1;
         set1.emplace(0);
@@ -763,6 +877,16 @@ namespace {
         set2.emplace(0);
         set1.emplace(2);
         this -> difference_of_test_template(set1, set2);
+    }
+
+    TYPED_TEST_P(set_test, difference_of_basic_parallel_test) {
+        TypeParam set1;
+        set1.emplace(0);
+        set1.emplace(1);
+        TypeParam set2;
+        set2.emplace(0);
+        set1.emplace(2);
+        this -> difference_of_test_template(set1, set2, true);
     }
 
     TYPED_TEST_P(set_test, difference_of_empty_test) {
@@ -790,6 +914,22 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(set_test, difference_of_intermediate_parallel_test) {
+        auto stubs = get_random_stub_vector(SMALL_LIMIT * 2);
+        unsigned share_start = stubs.size() / 3;
+        unsigned share_end = stubs.size() - stubs.size() / 3;
+        TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
+        TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
+        unsigned skip = std::max<int>(1, stubs.size() / REPEAT);
+        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+            set1.insert(stubs[i]);
+            set2.insert(stubs[stubs.size() - 1 - i]);
+            if (i % skip == 0) {
+                this -> difference_of_test_template(set1, set2, true);
+            }
+        }
+    }
+
     
     TYPED_TEST_P(set_test, difference_of_stress_test) {
         auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
@@ -803,6 +943,22 @@ namespace {
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
                 this -> difference_of_test_template(set1, set2);
+            }
+        }
+    }
+
+    TYPED_TEST_P(set_test, difference_of_stress_parallel_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        unsigned share_start = stubs.size() / 3;
+        unsigned share_end = stubs.size() - stubs.size() / 3;
+        TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
+        TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+            set1.insert(stubs[i]);
+            set2.insert(stubs[stubs.size() - 1 - i]);
+            if (i % skip == 0) {
+                this -> difference_of_test_template(set1, set2, true);
             }
         }
     }
@@ -877,20 +1033,31 @@ namespace {
         min_geq_test,
         min_geq_const_test,
         union_of_basic_test,
+        union_of_basic_parallel_test,
         union_of_conflict_basic_test,
+        union_of_conflict_basic_parallel_test,
         union_of_empty_test,
         union_of_intermediate_test,
+        union_of_intermediate_parallel_test,
         union_of_conflict_intermediate_test,
         union_of_stress_test,
+        union_of_stress_parallel_test,
         union_of_conflict_stress_test,
+        union_of_conflict_stress_parallel_test,
         intersection_of_basic_test,
+        intersection_of_basic_parallel_test,
         intersection_of_empty_test,
         intersection_of_intermediate_test,
+        intersection_of_intermediate_parallel_test,
         intersection_of_stress_test,
+        intersection_of_stress_parallel_test,
         difference_of_basic_test,
+        difference_of_basic_parallel_test,
         difference_of_empty_test,
         difference_of_intermediate_test,
+        difference_of_intermediate_parallel_test,
         difference_of_stress_test,
+        difference_of_stress_parallel_test,
         mixed_stress_test
     );
 }

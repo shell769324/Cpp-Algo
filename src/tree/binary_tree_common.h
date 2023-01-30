@@ -27,4 +27,8 @@ concept key_extractable =
  */
 template <typename K, typename V, typename KeyOf, typename Comparator>
 concept binary_tree_definable = key_extractable<K, V, KeyOf> && std::predicate<Comparator, K, K>;
+
+template <typename V, typename Resolver>
+concept is_resolver = std::is_invocable_r_v<bool, Resolver, const V&, const V&>;
+
 }

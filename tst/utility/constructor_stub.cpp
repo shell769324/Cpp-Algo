@@ -11,10 +11,10 @@ int constructor_stub::copy_constructor_invocation_count = 0;
 int constructor_stub::move_constructor_invocation_count = 0;
 int constructor_stub::assignment_operator_invocation_count = 0;
 int constructor_stub::move_assignment_operator_invocation_count = 0;
-int constructor_stub::destructor_invocation_count = 0;
-int constructor_stub::constructor_invocation_count = 0;
+std::atomic_int constructor_stub::destructor_invocation_count = 0;
+std::atomic_int constructor_stub::constructor_invocation_count = 0;
 
-int constructor_stub::counter = 0;
+std::atomic_int constructor_stub::counter = 0;
 
 constructor_stub::constructor_stub() {
     id = counter++;

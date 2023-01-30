@@ -7,6 +7,7 @@
 #include "binary_tree_node.h"
 #include "binary_tree_iterator.h"
 #include "src/common.h"
+#include <optional>
 
 namespace algo {
 
@@ -60,6 +61,19 @@ public:
         avl_node* node_clone = new avl_node(this -> value);
         node_clone -> height = height;
         return node_clone;
+    }
+
+    friend bool should_parallelize(avl_node* node1, avl_node* node2) {
+        if (node1 == nullptr || node2 == nullptr) {
+            return false;
+        }
+        unsigned char smaller = std::min(node1 -> height, node2 -> height);
+        unsigned char bigger = std::max(node1 -> height, node2 -> height);
+        if (smaller >= 14) {
+            return true;
+        }
+        int work = 1 << smaller * (bigger - smaller + 1);
+        return work > 10000;
     }
 
     /**
@@ -151,6 +165,16 @@ public:
             this -> right_child -> rotate_right();
         }
         return rotate_left();
+    }
+
+    void printPair() {
+        std::cout << this -> value.first.id << ":" << this -> value.second.id << ":" << (int) height << std::endl;
+        if (this -> left_child) {
+            this -> left_child -> printPair();
+        }
+        if (this -> right_child) {
+            this -> right_child -> printPair();
+        }
     }
 };
 
@@ -1067,13 +1091,38 @@ public:
      * @param root the avl tree to split.
      * @param divider the node that contains the key.
      * @param resolver a conflict resolution function
-     * @return a node such that its left child and right child are complementary partitions of the input tree
-     *         Note that the returning node is no way a balance tree. It is just a way to return multiple things.
-     *         without having to resort to tuple, which is slow
+     * @return a pair of node and boolean such that the node's left child and right child are complementary
+     *         partitions of the input tree. Note that the returning node is no way a balance tree. It is just a way to return multiple things.
+     *         without having to resort to tuple, which is slow. The boolean is true if a collision occurs. False otherwise.
      */
     template<typename Resolver=chooser<value_type> >
-    std::pair<smart_ptr_type, bool> split(smart_ptr_type root, smart_ptr_type divider, Resolver resolver = Resolver()) const {
+    std::pair<smart_ptr_type, bool> split(smart_ptr_type root, smart_ptr_type divider, Resolver resolver = Resolver()) 
+        const requires is_resolver<value_type, Resolver> {
         return split_helper(std::move(root), std::move(divider), key_of(divider -> value), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree union_of_helper(avl_tree tree1, avl_tree tree2,
+        std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) 
+        requires is_resolver<value_type, Resolver> {
+        if (tree1.is_empty()) {
+            return tree2;
+        }
+        if (tree2.is_empty()) {
+            return tree1;
+        }
+        
+        node_type* root1 = tree1.sentinel -> orphan_left_child();
+        node_type* root2 = tree2.sentinel -> orphan_left_child();
+        smart_ptr_type res;
+        if (executor.has_value()) {
+            res = tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get(), resolver);
+        } else {
+            res = tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver);
+        }
+        tree1.sentinel -> link_left_child(std::move(res));
+        tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
+        return tree1;
     }
 
     /**
@@ -1087,17 +1136,40 @@ public:
      * @return the union of the trees 
      */
     template<typename Resolver=chooser<value_type> >
-    friend avl_tree union_of(avl_tree tree1, avl_tree tree2, Resolver resolver=Resolver()) {
+    friend avl_tree union_of(avl_tree tree1, avl_tree tree2, Resolver resolver=Resolver()) 
+        requires is_resolver<value_type, Resolver> {
+        return union_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>>(), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree union_of(avl_tree tree1, avl_tree tree2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver> {
+        return union_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree intersection_of_helper(avl_tree tree1, avl_tree tree2,
+        std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) 
+        requires is_resolver<value_type, Resolver> {
         if (tree1.is_empty()) {
-            return tree2;
+            return tree1;
         }
         if (tree2.is_empty()) {
-            return tree1;
+            return tree2;
         }
         
         node_type* root1 = tree1.sentinel -> orphan_left_child();
         node_type* root2 = tree2.sentinel -> orphan_left_child();
-        tree1.sentinel -> link_left_child(tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver));
+        smart_ptr_type res;
+
+        if (executor.has_value()) {
+            res = tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get(), resolver);
+        } else {
+            res = tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver);
+        }
+        tree1.sentinel -> safe_link_left_child(std::move(res));
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
         return tree1;
     }
@@ -1107,24 +1179,41 @@ public:
      * 
      * @tparam Resolver a function that resolves conflicts if the key also exists in the tree
      *         It inputs two values and output true if the first value should be picked
-     * @param tree1 the first operand of the union operation
-     * @param tree2 the second operand of the union operation
+     * @param tree1 the first operand of the intersection operation
+     * @param tree2 the second operand of the intersection operation
      * @param resolver a conflict resolution function
      * @return the intersection of the trees
      */
     template<typename Resolver=chooser<value_type> >
-    friend avl_tree intersection_of(avl_tree tree1, avl_tree tree2, Resolver resolver=Resolver()) {
-        if (tree1.is_empty()) {
+    friend avl_tree intersection_of(avl_tree tree1, avl_tree tree2, Resolver resolver=Resolver()) 
+        requires is_resolver<value_type, Resolver> {
+        return intersection_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>>(), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree intersection_of(avl_tree tree1, avl_tree tree2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver> {
+        return intersection_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)), resolver);
+    }
+
+    friend avl_tree difference_of_helper(avl_tree tree1, avl_tree tree2,
+        std::optional<std::reference_wrapper<thread_pool_executor>> executor) {
+        if (tree1.is_empty() || tree2.is_empty()) {
             return tree1;
-        }
-        if (tree2.is_empty()) {
-            return tree2;
         }
         
         node_type* root1 = tree1.sentinel -> orphan_left_child();
         node_type* root2 = tree2.sentinel -> orphan_left_child();
+        smart_ptr_type res;
 
-        tree1.sentinel -> safe_link_left_child(tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver));
+        if (executor.has_value()) {
+            res = tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get());
+        } else {
+            res = tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2));
+        }
+        tree1.sentinel -> safe_link_left_child(std::move(res));
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
         return tree1;
     }
@@ -1137,16 +1226,13 @@ public:
      * @return the difference of the trees
      */
     friend avl_tree difference_of(avl_tree tree1, avl_tree tree2) {
-        if (tree1.is_empty() || tree2.is_empty()) {
-            return tree1;
-        }
-        
-        node_type* root1 = tree1.sentinel -> orphan_left_child();
-        node_type* root2 = tree2.sentinel -> orphan_left_child();
+        return difference_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>>());
+    }
 
-        tree1.sentinel -> safe_link_left_child(tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2)));
-        tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
-        return tree1;
+    friend avl_tree difference_of(avl_tree tree1, avl_tree tree2, thread_pool_executor& executor) {
+        return difference_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)));
     }
 
 private:

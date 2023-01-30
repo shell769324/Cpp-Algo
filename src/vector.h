@@ -242,9 +242,9 @@ public:
         }
 
         if constexpr (std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_destructible_v<T>) {
-            if (capacity <= other.length) {
+            if (capacity >= other.length) {
                 std::destroy(data, data + length);
-                std::copy(other.data, other.data + other.length, data);
+                std::uninitialized_copy(other.data, other.data + other.length, data);
                 return *this;
             }
         }
@@ -273,10 +273,19 @@ public:
     /**
      * @brief get a reference to the nth element in the vector
      * 
-     * @param n the index of the element
+     * @param pos the index of the element
      */
-    reference operator[](size_t n) {
-        return *(data + n);
+    reference operator[](size_t pos) {
+        return const_cast<reference>(static_cast<const vector&>(*this)[pos]);
+    }
+
+    /**
+     * @brief get a constant reference to the nth element in the vector
+     * 
+     * @param pos the index of the element
+     */
+    const_reference operator[](size_t pos) const {
+        return *(data + pos);
     }
 
     /**

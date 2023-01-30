@@ -4,6 +4,7 @@
 #include "tst/utility/stub_iterator.h"
 #include "tst/tree/tree_test_util.h"
 #include "tst/tree/tree_bulk_operation_complexity_test.h"
+#include "tst/tree/tree_parallel_comparison_test.h"
 #include "tst/utility/common.h"
 #include <iostream>
 #include <cmath>
@@ -440,5 +441,7 @@ namespace {
     }
 
     INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree_bulk_operation_complexity, tree_bulk_operation_complexity_test,
+        stub_tree_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree_parallel_comparison, tree_parallel_comparison_test,
         stub_tree_type);
 }

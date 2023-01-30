@@ -1,5 +1,7 @@
 #pragma once
 #include <iostream>
+#include <atomic>
+
 namespace algo {
 
 class constructor_stub {
@@ -10,9 +12,9 @@ public:
     static int move_constructor_invocation_count;
     static int assignment_operator_invocation_count;
     static int move_assignment_operator_invocation_count;
-    static int destructor_invocation_count;
-    static int constructor_invocation_count;
-    static int counter;
+    static std::atomic_int destructor_invocation_count;
+    static std::atomic_int constructor_invocation_count;
+    static std::atomic_int counter;
 
 
     int id;

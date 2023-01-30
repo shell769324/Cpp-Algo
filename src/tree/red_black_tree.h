@@ -66,6 +66,21 @@ public:
         return node_clone;
     }
 
+    friend bool should_parallelize(red_black_node* node1, red_black_node* node2) {
+        if (!node1 || !node2) {
+            return false;
+        }
+        unsigned char height1 = node1 -> get_black_height();
+        unsigned char height2 = node2 -> get_black_height();
+        unsigned char smaller = std::min(height1, height2);
+        unsigned char bigger = std::max(height1, height2);
+        if (smaller >= 8) {
+            return true;
+        }
+        int work = 1 << smaller * (bigger - smaller + 1);
+        return work > 256;
+    }
+
     /**
      * @brief Check is a node is red
      */
@@ -160,9 +175,9 @@ public:
             bool is_other_left_child = other -> parent ? other -> is_left_child() : true;
             red_black_node* other_parent = other -> parent ? other -> orphan_self() : nullptr;
             if (is_this_left_child) {
-                other -> orphan_left_child();
+                other -> template orphan_left_child<false>();
             } else {
-                other -> orphan_right_child();
+                other -> template orphan_right_child<false>();
             }
             red_black_node* sibling = is_this_left_child ? other -> orphan_right_child() : other -> orphan_left_child();
             other -> safe_link_left_child(this -> orphan_left_child());
@@ -840,7 +855,7 @@ public:
              */
             target_node -> right_child -> mark_as_black();
             target_node -> right_child -> increment_height(1);
-            target_parent -> link_child(target_node -> orphan_right_child(), is_left_child);
+            target_parent -> link_child(target_node -> template orphan_right_child<false>(), is_left_child);
         } else {
             // curr represents the current subtree that just lost one black node along any path
             for (node_type* curr = target_node; curr -> parent != end;) {
@@ -1248,13 +1263,36 @@ public:
      * @param root the red black tree to split.
      * @param divider the node that contains the key.
      * @param resolver a conflict resolution function
-     * @return a node such that its left child and right child are complementary partitions of the input tree
-     *         Note that the returning node is no way a balance tree. It is just a way to return multiple things.
-     *         without having to resort to tuple, which is slow
+     * @return a pair of node and boolean such that the node's left child and right child are complementary
+     *         partitions of the input tree. Note that the returning node is no way a balance tree. It is just a way to return multiple things.
+     *         without having to resort to tuple, which is slow. The boolean is true if a collision occurs. False otherwise.
      */
     template<typename Resolver=chooser<value_type> >
     std::pair<smart_ptr_type, bool> split(smart_ptr_type root, smart_ptr_type divider, Resolver resolver = Resolver()) const {
         return split_helper(std::move(root), std::move(divider), key_of(divider -> value), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree union_of_helper(red_black_tree tree1, red_black_tree tree2,
+        std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) {
+        if (tree1.is_empty()) {
+            return tree2;
+        }
+        if (tree2.is_empty()) {
+            return tree1;
+        }
+        
+        node_type* root1 = tree1.sentinel -> orphan_left_child();
+        node_type* root2 = tree2.sentinel -> orphan_left_child();
+        smart_ptr_type res;
+        if (executor.has_value()) {
+            res = tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get(), resolver);
+        } else {
+            res = tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver);
+        }
+        tree1.sentinel -> link_left_child(std::move(res));
+        tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
+        return tree1;
     }
 
 
@@ -1266,20 +1304,41 @@ public:
      * @param tree1 the first operand of the union operation
      * @param tree2 the second operand of the union operation
      * @param resolver a conflict resolution function
-     * @return the union of the trees 
+     * @return the union of the trees
      */
     template<typename Resolver=chooser<value_type> >
     friend red_black_tree union_of(red_black_tree tree1, red_black_tree tree2, Resolver resolver=Resolver()) {
+        return union_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>>(), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree union_of(red_black_tree tree1, red_black_tree tree2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) {
+        return union_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree intersection_of_helper(red_black_tree tree1, red_black_tree tree2,
+        std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) {
         if (tree1.is_empty()) {
-            return tree2;
+            return tree1;
         }
         if (tree2.is_empty()) {
-            return tree1;
+            return tree2;
         }
         
         node_type* root1 = tree1.sentinel -> orphan_left_child();
         node_type* root2 = tree2.sentinel -> orphan_left_child();
-        tree1.sentinel -> link_left_child(tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver));
+        smart_ptr_type res;
+
+        if (executor.has_value()) {
+            res = tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get(), resolver);
+        } else {
+            res = tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver);
+        }
+        tree1.sentinel -> safe_link_left_child(std::move(res));
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
         return tree1;
     }
@@ -1296,17 +1355,33 @@ public:
      */
     template<typename Resolver=chooser<value_type> >
     friend red_black_tree intersection_of(red_black_tree tree1, red_black_tree tree2, Resolver resolver=Resolver()) {
-        if (tree1.is_empty()) {
+        return intersection_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>>(), resolver);
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree intersection_of(red_black_tree tree1, red_black_tree tree2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) {
+        return intersection_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)), resolver);
+    }
+
+    friend red_black_tree difference_of_helper(red_black_tree tree1, red_black_tree tree2,
+        std::optional<std::reference_wrapper<thread_pool_executor>> executor) {
+        if (tree1.is_empty() || tree2.is_empty()) {
             return tree1;
-        }
-        if (tree2.is_empty()) {
-            return tree2;
         }
         
         node_type* root1 = tree1.sentinel -> orphan_left_child();
         node_type* root2 = tree2.sentinel -> orphan_left_child();
+        smart_ptr_type res;
 
-        tree1.sentinel -> safe_link_left_child(tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver));
+        if (executor.has_value()) {
+            res = tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get());
+        } else {
+            res = tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2));
+        }
+        tree1.sentinel -> safe_link_left_child(std::move(res));
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
         return tree1;
     }
@@ -1319,16 +1394,13 @@ public:
      * @return the difference of the trees
      */
     friend red_black_tree difference_of(red_black_tree tree1, red_black_tree tree2) {
-        if (tree1.is_empty() || tree2.is_empty()) {
-            return tree1;
-        }
-        
-        node_type* root1 = tree1.sentinel -> orphan_left_child();
-        node_type* root2 = tree2.sentinel -> orphan_left_child();
+        return difference_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>>());
+    }
 
-        tree1.sentinel -> safe_link_left_child(tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2)));
-        tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
-        return tree1;
+    friend red_black_tree difference_of(red_black_tree tree1, red_black_tree tree2, thread_pool_executor& executor) {
+        return difference_of_helper(std::move(tree1), std::move(tree2),
+            std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)));
     }
 
     /**

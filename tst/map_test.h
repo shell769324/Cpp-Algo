@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 #include "utility/constructor_stub.h"
 #include "utility/common.h"
+#include "src/thread_pool_executor/thread_pool_executor.h"
 
 namespace {
     using namespace algo;
@@ -37,6 +38,8 @@ namespace {
 
     template <typename T>
     class map_test : public testing::Test {
+        public:
+        thread_pool_executor executor;
         protected:
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
@@ -195,18 +198,29 @@ namespace {
             int num = (stubs[middle_index].id + stubs[middle_index - 1].id) / 2;
             constructor_stub stub(num);
             auto& pair = *map.min_geq(stub);
-            EXPECT_EQ(pair.first, stubs[middle_index]);
+            if (stubs[middle_index - 1].id + 1 == stubs[middle_index].id) {
+                EXPECT_EQ(pair.first, stubs[middle_index - 1]);
+            } else {
+                EXPECT_EQ(pair.first, stubs[middle_index]);
+            }
+            std::cout << pair.first.id;
             EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(pair)>>,
                     std::is_const_v<Map>);
             EXPECT_EQ(map.min_geq(stubs.back().id + 1), map.end());
         }
 
         template<typename Resolver>
-        static void union_of_test_template(const T& map1, const T& map2, Resolver resolver) {
+        void union_of_test_template(const T& map1, const T& map2, Resolver resolver, 
+            bool is_parallel=false) {
             T map_copy1(map1);
             T map_copy2(map2);
+            T map;
             mark_constructor_counts();
-            T map = union_of<Resolver>(std::move(map_copy1), std::move(map_copy2), resolver);
+            if (is_parallel) {
+                map = union_of<Resolver>(std::move(map_copy1), std::move(map_copy2), this -> executor, resolver);
+            } else {
+                map = union_of<Resolver>(std::move(map_copy1), std::move(map_copy2), resolver);
+            }
             check_constructor_counts();
             EXPECT_TRUE(map.is_valid());
             // No element is missing
@@ -235,11 +249,16 @@ namespace {
         }
 
         template<typename Resolver>
-        void intersection_of_test_template(const T& map1, const T& map2, Resolver resolver) {
+        void intersection_of_test_template(const T& map1, const T& map2, Resolver resolver, bool is_parallel=false) {
             T map_copy1(map1);
             T map_copy2(map2);
+            T map;
             mark_constructor_counts();
-            T map = intersection_of<Resolver>(std::move(map_copy1), std::move(map_copy2), resolver);
+            if (is_parallel) {
+                map = intersection_of<Resolver>(std::move(map_copy1), std::move(map_copy2), this -> executor, resolver);
+            } else {
+                map = intersection_of<Resolver>(std::move(map_copy1), std::move(map_copy2), resolver);
+            }
             check_constructor_counts();
             EXPECT_TRUE(map.is_valid());
             // No extraneous elements
@@ -261,11 +280,16 @@ namespace {
             }
         }
 
-        static void difference_of_test_template(const T& map1, const T& map2) {
+        void difference_of_test_template(const T& map1, const T& map2, bool is_parallel=false) {
             T map_copy1(map1);
             T map_copy2(map2);
+            T map;
             mark_constructor_counts();
-            T map = difference_of(std::move(map_copy1), std::move(map_copy2));
+            if (is_parallel) {
+                map = difference_of(std::move(map_copy1), std::move(map_copy2), this -> executor);
+            } else {
+                map = difference_of(std::move(map_copy1), std::move(map_copy2));
+            }
             check_constructor_counts();
             EXPECT_TRUE(map.is_valid());
             // No extraneous elements
@@ -841,12 +865,28 @@ namespace {
         this -> union_of_test_template(map1, map2, stub_pair_resolver());
     }
 
+    TYPED_TEST_P(map_test, union_of_basic_parallel_test) {
+        TypeParam map1;
+        map1[1] = -1;
+        TypeParam map2;
+        map2[2] = -2;
+        this -> union_of_test_template(map1, map2, stub_pair_resolver(), true);
+    }
+
     TYPED_TEST_P(map_test, union_of_conflict_basic_test) {
         TypeParam map1;
         map1[1] = -1;
         TypeParam map2;
         map2[1] = -2;
         this -> union_of_test_template(map1, map2, stub_pair_resolver());
+    }
+
+    TYPED_TEST_P(map_test, union_of_conflict_basic_parallel_test) {
+        TypeParam map1;
+        map1[1] = -1;
+        TypeParam map2;
+        map2[1] = -2;
+        this -> union_of_test_template(map1, map2, stub_pair_resolver(), true);
     }
 
     TYPED_TEST_P(map_test, union_of_empty_test) {
@@ -862,6 +902,13 @@ namespace {
         TypeParam map1(stub_pairs.begin(), stub_pairs.begin() + SMALL_LIMIT / 2);
         TypeParam map2(stub_pairs.begin() + SMALL_LIMIT / 2, stub_pairs.end());
         this -> union_of_test_template(map1, map2, stub_pair_resolver());
+    }
+
+    TYPED_TEST_P(map_test, union_of_intermediate_parallel_test) {
+        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
+        TypeParam map1(stub_pairs.begin(), stub_pairs.begin() + SMALL_LIMIT / 2);
+        TypeParam map2(stub_pairs.begin() + SMALL_LIMIT / 2, stub_pairs.end());
+        this -> union_of_test_template(map1, map2, stub_pair_resolver(), true);
     }
     
     TYPED_TEST_P(map_test, union_of_conflict_intermediate_test) {
@@ -888,6 +935,21 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(map_test, union_of_stress_parallel_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        TypeParam map1;
+        TypeParam map2;
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (unsigned i = 0; i < stub_pairs.size() / 2; i++) {
+            map1.insert(stub_pairs[i]);
+            unsigned reverse_index = stub_pairs.size() - 1 - i;
+            map2.insert(stub_pairs[reverse_index]);
+            if (i % skip == 0) {
+                this -> union_of_test_template(map1, map2, stub_pair_resolver(), true);
+            }
+        }
+    }
+
     TYPED_TEST_P(map_test, union_of_conflict_stress_test) {
         auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
         unsigned share_start = stub_pairs.size() / 3;
@@ -905,6 +967,23 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(map_test, union_of_conflict_stress_parallel_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        unsigned share_start = stub_pairs.size() / 3;
+        unsigned share_end = stub_pairs.size() - stub_pairs.size() / 3;
+        TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
+        TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (unsigned i = 0; i < stub_pairs.size() / 3; i++) {
+            map1.insert(stub_pairs[i]);
+            unsigned reverse_index = stub_pairs.size() - 1 - i;
+            map2.insert(stub_pairs[reverse_index]);
+            if (i % skip == 0) {
+                this -> union_of_test_template(map1, map2, stub_pair_resolver(), true);
+            }
+        }
+    }
+
     TYPED_TEST_P(map_test, intersection_of_basic_test) {
         TypeParam map1;
         map1[0] = 0;
@@ -913,6 +992,16 @@ namespace {
         map2[0] = 2;
         map2[3] = -3;
         this -> intersection_of_test_template(map1, map2, stub_pair_resolver());
+    }
+
+    TYPED_TEST_P(map_test, intersection_of_basic_parallel_test) {
+        TypeParam map1;
+        map1[0] = 0;
+        map1[1] = -1;
+        TypeParam map2;
+        map2[0] = 2;
+        map2[3] = -3;
+        this -> intersection_of_test_template(map1, map2, stub_pair_resolver(), true);
     }
 
     TYPED_TEST_P(map_test, intersection_of_empty_test) {
@@ -956,6 +1045,22 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(map_test, intersection_of_stress_parallel_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        unsigned share_start = stub_pairs.size() / 3;
+        unsigned share_end = stub_pairs.size() - stub_pairs.size() / 3;
+        TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
+        TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+            map1.insert(stub_pairs[i]);
+            map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
+            if (i % skip == 0) {
+                this -> intersection_of_test_template(map1, map2, stub_pair_resolver(), true);
+            }
+        }
+    }
+
     TYPED_TEST_P(map_test, difference_of_basic_test) {
         TypeParam map1;
         map1[0] = 0;
@@ -964,6 +1069,16 @@ namespace {
         map2[0] = 2;
         map1[2] = -2;
         this -> difference_of_test_template(map1, map2);
+    }
+
+    TYPED_TEST_P(map_test, difference_of_basic_parallel_test) {
+        TypeParam map1;
+        map1[0] = 0;
+        map1[1] = -1;
+        TypeParam map2;
+        map2[0] = 2;
+        map1[2] = -2;
+        this -> difference_of_test_template(map1, map2, true);
     }
 
     TYPED_TEST_P(map_test, difference_of_empty_test) {
@@ -1003,6 +1118,22 @@ namespace {
             map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
             if (i % skip == 0) {
                 this -> difference_of_test_template(map1, map2);
+            }
+        }
+    }
+
+    TYPED_TEST_P(map_test, difference_of_stress_parallel_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        unsigned share_start = stub_pairs.size() / 3;
+        unsigned share_end = stub_pairs.size() - stub_pairs.size() / 3;
+        TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
+        TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
+        unsigned skip = MEDIUM_LIMIT / REPEAT;
+        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+            map1.insert(stub_pairs[i]);
+            map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
+            if (i % skip == 0) {
+                this -> difference_of_test_template(map1, map2, true);
             }
         }
     }
@@ -1102,20 +1233,29 @@ namespace {
         min_geq_test,
         min_geq_const_test,
         union_of_basic_test,
+        union_of_basic_parallel_test,
         union_of_conflict_basic_test,
+        union_of_conflict_basic_parallel_test,
         union_of_empty_test,
         union_of_intermediate_test,
+        union_of_intermediate_parallel_test,
         union_of_conflict_intermediate_test,
         union_of_stress_test,
+        union_of_stress_parallel_test,
         union_of_conflict_stress_test,
+        union_of_conflict_stress_parallel_test,
         intersection_of_basic_test,
+        intersection_of_basic_parallel_test,
         intersection_of_empty_test,
         intersection_of_intermediate_test,
         intersection_of_stress_test,
+        intersection_of_stress_parallel_test,
         difference_of_basic_test,
+        difference_of_basic_parallel_test,
         difference_of_empty_test,
         difference_of_intermediate_test,
         difference_of_stress_test,
+        difference_of_stress_parallel_test,
         mixed_stress_test
     );
 }

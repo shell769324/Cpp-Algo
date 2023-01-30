@@ -409,8 +409,16 @@ public:
      * @return the union of the avl tree sets 
      */
     template<typename Resolver=chooser<value_type> >
-    friend avl_tree_set union_of(avl_tree_set set1, avl_tree_set set2, Resolver resolver=Resolver()) {
+    friend avl_tree_set union_of(avl_tree_set set1, avl_tree_set set2, Resolver resolver=Resolver())
+        requires is_resolver<value_type, Resolver> {
         set1.tree = union_of(std::move(set1.tree), std::move(set2.tree), resolver);
+        return set1;
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree_set union_of(avl_tree_set set1, avl_tree_set set2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver> {
+        set1.tree = union_of(std::move(set1.tree), std::move(set2.tree), executor, resolver);
         return set1;
     }
 
@@ -425,8 +433,16 @@ public:
      * @return the intersection of the avl tree sets 
      */
     template<typename Resolver=chooser<value_type> >
-    friend avl_tree_set intersection_of(avl_tree_set set1, avl_tree_set set2, Resolver resolver=Resolver()) {
+    friend avl_tree_set intersection_of(avl_tree_set set1, avl_tree_set set2, Resolver resolver=Resolver())
+        requires is_resolver<value_type, Resolver> {
         set1.tree = intersection_of(std::move(set1.tree), std::move(set2.tree), resolver);
+        return set1;
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend avl_tree_set intersection_of(avl_tree_set set1, avl_tree_set set2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver>  {
+        set1.tree = intersection_of(std::move(set1.tree), std::move(set2.tree), executor, resolver);
         return set1;
     }
 
@@ -439,6 +455,11 @@ public:
      */
     friend avl_tree_set difference_of(avl_tree_set set1, avl_tree_set set2) {
         set1.tree = difference_of(std::move(set1.tree), std::move(set2.tree));
+        return set1;
+    }
+
+    friend avl_tree_set difference_of(avl_tree_set set1, avl_tree_set set2, thread_pool_executor& executor) {
+        set1.tree = difference_of(std::move(set1.tree), std::move(set2.tree), executor);
         return set1;
     }
 

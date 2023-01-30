@@ -7,7 +7,7 @@ int random_number(int lo, int hi) {
 }
 
 int random_number() {
-    return random_number(0, 10000);
+    return random_number(0, 100000);
 }
 
 

@@ -5,6 +5,7 @@
 #include "tst/tree/tree_test_util.h"
 #include "tst/utility/common.h"
 #include "tst/tree/tree_bulk_operation_complexity_test.h"
+#include "tst/tree/tree_parallel_comparison_test.h"
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -480,5 +481,7 @@ namespace {
     }
 
     INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree_bulk_operation_complexity, tree_bulk_operation_complexity_test,
+        stub_tree_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree_parallel_comparison, tree_parallel_comparison_test,
         stub_tree_type);
 }

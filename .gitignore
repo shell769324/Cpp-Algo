@@ -1,0 +1,12 @@
+src/experimental/
+src/cmake_install.cmake
+src/CMakeFiles/
+CMakeFiles/
+build/
+src/Makefile
+tst/Makefile
+tst/cmake_install.cmake
+lib/
+.DS_Store
+.VSCodeCounter/
+.vscode/

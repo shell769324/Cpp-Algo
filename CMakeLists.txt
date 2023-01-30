@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Name of the project
-project(star_anise)
+project(cpp_algo)
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 

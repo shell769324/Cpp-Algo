@@ -528,8 +528,16 @@ public:
      * @return the union of the red black tree maps 
      */
     template<typename Resolver=chooser<value_type> >
-    friend red_black_tree_map union_of(red_black_tree_map map1, red_black_tree_map map2, Resolver resolver=Resolver()) {
+    friend red_black_tree_map union_of(red_black_tree_map map1, red_black_tree_map map2, Resolver resolver=Resolver())
+            requires is_resolver<value_type, Resolver> {
         map1.tree = union_of(std::move(map1.tree), std::move(map2.tree), resolver);
+        return map1;
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree_map union_of(red_black_tree_map map1, red_black_tree_map map2, thread_pool_executor& executor,
+            Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver>  {
+        map1.tree = union_of(std::move(map1.tree), std::move(map2.tree), executor, resolver);
         return map1;
     }
 
@@ -544,8 +552,16 @@ public:
      * @return the intersection of the red black tree maps 
      */
     template<typename Resolver=chooser<value_type> >
-    friend red_black_tree_map intersection_of(red_black_tree_map map1, red_black_tree_map map2, Resolver resolver=Resolver()) {
+    friend red_black_tree_map intersection_of(red_black_tree_map map1, red_black_tree_map map2, Resolver resolver=Resolver())
+        requires is_resolver<value_type, Resolver> {
         map1.tree = intersection_of(std::move(map1.tree), std::move(map2.tree), resolver);
+        return map1;
+    }
+
+    template<typename Resolver=chooser<value_type> >
+    friend red_black_tree_map intersection_of(red_black_tree_map map1, red_black_tree_map map2, thread_pool_executor& executor,
+        Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver> {
+        map1.tree = intersection_of(std::move(map1.tree), std::move(map2.tree), executor, resolver);
         return map1;
     }
 
@@ -554,10 +570,15 @@ public:
      * 
      * @param map1 the map to subtract from
      * @param map2 the map that subtracts
-     * @return the difference of the red black tree maps 
+     * @return the difference of the red black tree maps
      */
     friend red_black_tree_map difference_of(red_black_tree_map map1, red_black_tree_map map2) {
         map1.tree = difference_of(std::move(map1.tree), std::move(map2.tree));
+        return map1;
+    }
+
+    friend red_black_tree_map difference_of(red_black_tree_map map1, red_black_tree_map map2, thread_pool_executor& executor) {
+        map1.tree = difference_of(std::move(map1.tree), std::move(map2.tree), executor);
         return map1;
     }
 

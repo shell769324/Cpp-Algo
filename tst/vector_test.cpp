@@ -69,6 +69,17 @@ namespace {
         test_vec_std_vec_equality(vec_copy, std_vec);
     }
 
+    TEST_F(vector_test, copy_constructor_operation_test) {
+        vector<constructor_stub> vec(MEDIUM_LIMIT);
+        std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
+        vector<constructor_stub> vec_copy(vec);
+        for (int i = 0; i < MEDIUM_LIMIT * 2; i++) {
+            vec_copy.emplace_back(i);
+            std_vec.emplace_back(i);
+        }
+        test_vec_std_vec_equality(vec_copy, std_vec);
+    }
+
     TEST_F(vector_test, move_constructor_test) {
         vector<constructor_stub> vec(MEDIUM_LIMIT);
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
@@ -98,6 +109,18 @@ namespace {
         vector<constructor_stub> vec_copy;
         vec_copy = vec;
         test_vec_std_vec_equality(vec, std_vec);
+        test_vec_std_vec_equality(vec_copy, std_vec);
+    }
+
+    TEST_F(vector_test, assignment_operator_operation_test) {
+        vector<constructor_stub> vec(MEDIUM_LIMIT);
+        std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
+        vector<constructor_stub> vec_copy;
+        vec_copy = vec;
+        for (int i = 0; i < MEDIUM_LIMIT * 2; i++) {
+            vec_copy.emplace_back(i);
+            std_vec.emplace_back(i);
+        }
         test_vec_std_vec_equality(vec_copy, std_vec);
     }
 

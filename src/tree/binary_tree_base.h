@@ -2,6 +2,8 @@
 #include "binary_tree_node.h"
 #include "binary_tree_common.h"
 #include "binary_tree_iterator.h"
+#include "src/thread_pool_executor/thread_pool_executor.h"
+#include <functional>
 
 namespace algo {
 
@@ -159,33 +161,26 @@ public:
         throw std::range_error("Impossible state");
     }
 
+private:
     /**
-     * @brief A helper function for computing union of two trees
+     * @brief An higher order function that combines two rooted trees according to a combinator
+     * 
+     * @tparam Resolver the type of the function that resolves conflicts when the same key
+     *         is found in both trees
+     * @tparam Combinator the type of the function that determines how trees are combined
+     * @param root1 the root of the first tree
+     * @param root2 the root of the second tree
+     * @param resolver the function that resolves conflicts when the same key is found in both trees
+     * @param combinator the function that determines how trees are combined
+     * @return smart_ptr_type the tree after combining the two trees
      */
-    template<typename Resolver>
-    smart_ptr_type union_of(smart_ptr_type root1, smart_ptr_type root2, Resolver& resolver) {
-        if (!root1) {
-            return root2;
-        }
-        if (!root2) {
-            return root1;
-        }
-        node_type* left1 = root1 -> orphan_left_child();
-        node_type* right1 = root1 -> orphan_right_child();
-
-        smart_ptr_type split_root(std::move(underlying_ptr() -> split(std::move(root2), std::move(root1), resolver).first));
-        smart_ptr_type result_left(union_of(smart_ptr_type(left1), std::move(split_root -> left_child), resolver));
-        smart_ptr_type result_right(union_of(smart_ptr_type(right1), std::move(split_root -> right_child), resolver));
-
-        return TreeType::join(std::move(result_left), std::move(split_root), std::move(result_right));
-    }
-
-    /**
-     * @brief A helper function for computing intersection of two trees
-     */
-    template<typename Resolver>
-    smart_ptr_type intersection_of(smart_ptr_type root1, smart_ptr_type root2, Resolver& resolver) {
+    template<typename Resolver, typename Combinator>
+    smart_ptr_type set_operation(smart_ptr_type root1, smart_ptr_type root2, Resolver& resolver,
+        Combinator& combinator) {
         if (!root1 || !root2) {
+            if (combinator(root1 != nullptr, root2 != nullptr)) {
+                return root1 ? std::move(root1) : std::move(root2);
+            }
             return nullptr;
         }
         node_type* left1 = root1 -> orphan_left_child();
@@ -193,38 +188,110 @@ public:
         std::pair<smart_ptr_type, bool> split_result(underlying_ptr() -> split(std::move(root2), std::move(root1), resolver));
         smart_ptr_type split_root = std::move(split_result.first);
 
-        smart_ptr_type result_left(intersection_of(smart_ptr_type(left1), std::move(split_root -> left_child), resolver));
-        smart_ptr_type result_right(intersection_of(smart_ptr_type(right1), std::move(split_root -> right_child), resolver));
+        smart_ptr_type result_left(set_operation(smart_ptr_type(left1), std::move(split_root -> left_child), resolver, combinator));
+        smart_ptr_type result_right(set_operation(smart_ptr_type(right1), std::move(split_root -> right_child), resolver, combinator));
 
-        if (split_result.second) {
+        if (combinator(true, split_result.second)) {
             return TreeType::join(std::move(result_left), std::move(split_root), std::move(result_right));
         }
         return TreeType::join(std::move(result_left), std::move(result_right));
+    }
+
+    template<typename Resolver, typename Combinator>
+    smart_ptr_type set_operation(smart_ptr_type root1, smart_ptr_type root2, thread_pool_executor& executor,
+        Resolver& resolver, Combinator& combinator) {
+        if (!root1 || !root2) {
+            if (combinator(root1 != nullptr, root2 != nullptr)) {
+                return root1 ? std::move(root1) : std::move(root2);
+            }
+            return nullptr;
+        }
+        node_type* left1 = root1 -> orphan_left_child();
+        node_type* right1 = root1 -> orphan_right_child();
+        std::pair<smart_ptr_type, bool> split_result(underlying_ptr() -> split(std::move(root2), std::move(root1), resolver));
+        smart_ptr_type split_root = std::move(split_result.first);
+
+        std::future<smart_ptr_type> future;
+        bool is_parallel = should_parallelize(left1, split_root -> left_child.get());
+        
+        smart_ptr_type result_left;
+        smart_ptr_type result_right;
+        if (is_parallel) {
+            auto lambda = [this](smart_ptr_type root1, smart_ptr_type root2,
+                thread_pool_executor& executor, Resolver& resolver, Combinator& combinator) {
+                return set_operation(std::move(root1), std::move(root2), executor, resolver, combinator);
+            };
+            task<smart_ptr_type> task(
+                lambda, smart_ptr_type(left1), std::move(split_root -> left_child), executor, resolver, combinator);
+            future = task.get_future();
+            executor.attempt_parallel(std::move(task));
+        } else {
+            result_left = set_operation(smart_ptr_type(left1), std::move(split_root -> left_child), resolver, combinator);
+            result_right = set_operation(smart_ptr_type(right1), std::move(split_root -> right_child), resolver, combinator);
+        }
+
+        if (is_parallel) {
+            result_right = set_operation(smart_ptr_type(right1), std::move(split_root -> right_child), executor, resolver, combinator);
+            result_left = future.get();
+        }
+        if (combinator(true, split_result.second)) {
+            return TreeType::join(std::move(result_left), std::move(split_root), std::move(result_right));
+        }
+        return TreeType::join(std::move(result_left), std::move(result_right));
+    }
+
+public:
+
+    /**
+     * @brief A helper function for computing union of two trees
+     */
+    template<typename Resolver>
+    smart_ptr_type union_of(smart_ptr_type root1, smart_ptr_type root2, Resolver& resolver) {
+        constexpr auto combinator = std::logical_or();
+        return set_operation(std::move(root1), std::move(root2), resolver, combinator);
+    }
+
+    template<typename Resolver>
+    smart_ptr_type union_of(smart_ptr_type root1, smart_ptr_type root2, thread_pool_executor& executor,
+        Resolver& resolver) {
+        constexpr auto combinator = std::logical_or();
+        return set_operation(std::move(root1), std::move(root2), executor, resolver, combinator);
+    }
+
+    /**
+     * @brief A helper function for computing intersection of two trees
+     */
+    template<typename Resolver>
+    smart_ptr_type intersection_of(smart_ptr_type root1, smart_ptr_type root2, Resolver& resolver) {
+        constexpr auto combinator = std::logical_and();
+        return set_operation(std::move(root1), std::move(root2), resolver, combinator);
+    }
+
+    template<typename Resolver>
+    smart_ptr_type intersection_of(smart_ptr_type root1, smart_ptr_type root2, thread_pool_executor& executor,
+    Resolver& resolver) {
+        constexpr auto combinator = std::logical_and();
+
+        return set_operation(std::move(root1), std::move(root2), executor, resolver, combinator);
     }
     
     /**
      * @brief Helper method for computing difference of two trees
      */
     smart_ptr_type difference_of(smart_ptr_type root1, smart_ptr_type root2) {
-        if (!root1) {
-            return nullptr;
-        }
-        if (!root2) {
-            return root1;
-        }
-        node_type* left1 = root1 -> orphan_left_child();
-        node_type* right1 = root1 -> orphan_right_child();
-        std::pair<smart_ptr_type, bool> split_result(underlying_ptr() -> split(std::move(root2), std::move(root1), chooser<value_type>()));
-        smart_ptr_type split_root = std::move(split_result.first);
+        constexpr auto combinator = [](bool contains1, bool contains2) {
+            return contains1 && !contains2;
+        };
+        chooser<value_type> dummyResolver;
+        return set_operation(std::move(root1), std::move(root2), dummyResolver, combinator);
+    }
 
-        smart_ptr_type result_left(difference_of(smart_ptr_type(left1), std::move(split_root -> left_child)));
-        smart_ptr_type result_right(difference_of(smart_ptr_type(right1), std::move(split_root -> right_child)));
-
-        // If both trees have the divider, we don't want it
-        if (split_result.second) {
-            return TreeType::join(std::move(result_left), std::move(result_right));
-        }
-        return TreeType::join(std::move(result_left), std::move(split_root), std::move(result_right));
+    smart_ptr_type difference_of(smart_ptr_type root1, smart_ptr_type root2, thread_pool_executor& executor) {
+        constexpr auto combinator = [](bool contains1, bool contains2) {
+            return contains1 && !contains2;
+        };
+        chooser<value_type> dummyResolver;
+        return set_operation(std::move(root1), std::move(root2), executor, dummyResolver, combinator);
     }
 
     template<std::forward_iterator ForwardIt>
@@ -242,6 +309,12 @@ public:
         return true;
     }
 
+    /**
+     * @brief Compute the number of nodes in a tree
+     * 
+     * @param node the root of the tree
+     * @return unsigned the number of nodes in the tree
+     */
     unsigned compute_size(NodeType* node) const noexcept {
         if (!node) {
             return 0;
@@ -249,6 +322,13 @@ public:
         return 1 + compute_size(node -> left_child.get()) + compute_size(node -> right_child.get());
     }
 
+    /**
+     * @brief Check if the size of a tree matches a number
+     * 
+     * @param node the root of the tree
+     * @param expected_size the expected size of the tree
+     * @return true iff the tree size matches the expected size
+     */
     bool is_size_correct(NodeType* node, unsigned expected_size) const noexcept {
         unsigned actual_size = compute_size(node);
         if (actual_size != expected_size) {
@@ -260,6 +340,12 @@ public:
         return true;
     }
 
+    /**
+     * @brief Check if all nodes of a tree have their parent/children pointers set correctly
+     * 
+     * @param node the root of the tree
+     * @return true iff all
+     */
     static bool is_parent_child_link_mutual(const NodeType* node) noexcept {
         if (!node) {
             return true;

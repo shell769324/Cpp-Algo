@@ -12,6 +12,7 @@ namespace {
     protected:
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
+            std::srand(7759);
         }
 
         virtual void TearDown() {
