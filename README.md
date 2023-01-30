@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# Cpp Algo
-=======
 # CPP Algo
->>>>>>> 82acec1 (1. Add deque and some unit tests for it)
 Generic C++ containers and algorithms
 
 ## Overview
