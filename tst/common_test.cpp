@@ -26,7 +26,7 @@ namespace {
 
     template<typename T>
     void verify_stub_ids(T* stubs, std::size_t length, int start) {
-        for (std::size_t i = 0; i < length; i++) {
+        for (std::size_t i = 0; i < length; ++i) {
             EXPECT_EQ(stubs[i].id, start + i);
         }
     }

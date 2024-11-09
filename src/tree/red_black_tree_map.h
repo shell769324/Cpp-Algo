@@ -17,7 +17,7 @@ public:
     using iterator = binary_tree_iterator<value_type>;
     using const_iterator = binary_tree_iterator<const value_type>;
     using reverse_iterator = binary_tree_iterator<value_type, true>;
-    using const_reverse_iterator = const binary_tree_iterator<const value_type, true>;
+    using const_reverse_iterator = binary_tree_iterator<const value_type, true>;
 
 private:
     using red_black_tree_type = red_black_tree<key_type, value_type, pair_left_accessor<key_type, mapped_type>, Compare>;

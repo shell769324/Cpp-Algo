@@ -51,7 +51,7 @@ namespace {
     template<typename T>
     std::stack<T> construct_std_stack(std::size_t limit) {
         std::stack<T> st;
-        for (int i = 0; i < limit; i++) {
+        for (int i = 0; i < limit; ++i) {
             st.emplace();
         }
         return st;
@@ -94,7 +94,7 @@ namespace {
     TEST_F(stack_test, fill_copy_constructor_test) {
         constructor_stub stub;
         stack<constructor_stub> st(SMALL_LIMIT, stub);
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             EXPECT_EQ(stub, st.top());
             st.pop();
         }
@@ -116,7 +116,7 @@ namespace {
 
     TEST_F(stack_test, initializer_constructor_test) {
         std::stack<int> std_st;
-        for (int i = 1; i <= 5; i++) {
+        for (int i = 1; i <= 5; ++i) {
             std_st.push(i);
         }
         stack<int> st{1, 2, 3, 4, 5};
@@ -171,10 +171,10 @@ namespace {
 
     TEST_F(stack_test, push_primitive_stress_test) {
         stack<int> st;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             st.push(i);
         }
-        for (int i = LIMIT - 1; i >= 0; i--) {
+        for (int i = LIMIT - 1; i >= 0; --i) {
             EXPECT_EQ(st.top(), i);
             st.pop();
         }
@@ -183,10 +183,10 @@ namespace {
 
     TEST_F(stack_test, push_stress_test) {
         stack<constructor_stub> st;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             st.push(constructor_stub(i));
         }
-        for (int i = LIMIT - 1; i >= 0; i--) {
+        for (int i = LIMIT - 1; i >= 0; --i) {
             EXPECT_EQ(st.top().id, i);
             st.pop();
         }
@@ -206,10 +206,10 @@ namespace {
 
     TEST_F(stack_test, pop_stress_test) {
         stack<constructor_stub> st;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             st.push(constructor_stub());
         }
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             st.pop();
         }
         EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
@@ -220,14 +220,14 @@ namespace {
         std::stack<constructor_stub> st_copy;
         int rep = 20;
         int limit = 1000;
-        for (int i = 0; i < rep; i++) {
-            for (int j = 0; j < limit; j++) {
+        for (int i = 0; i < rep; ++i) {
+            for (int j = 0; j < limit; ++j) {
                 constructor_stub constructor_stub;
                 st.push(constructor_stub);
                 st_copy.push(constructor_stub);
             }
             std::size_t half_size = st.size() / 2;
-            for (std::size_t j = 0; j < half_size; j++) {
+            for (std::size_t j = 0; j < half_size; ++j) {
                 st.pop();
                 st_copy.pop();
             }
@@ -252,11 +252,11 @@ namespace {
 
     TEST_F(stack_test, size_test) {
         stack<constructor_stub> st;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             st.push(constructor_stub());
             EXPECT_EQ(st.size(), i + 1);
         }
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             st.pop();
             EXPECT_EQ(st.size(), LIMIT - i - 1);
         }
@@ -265,7 +265,7 @@ namespace {
 
     TEST_F(stack_test, back_test) {
         stack<constructor_stub> st;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             st.push(constructor_stub(i));
         }
         EXPECT_EQ(st.top().id, SMALL_LIMIT - 1);
@@ -273,7 +273,7 @@ namespace {
 
     TEST_F(stack_test, top_alias_test) {
         stack<constructor_stub> st;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             st.push(constructor_stub(i));
         }
         st.top().id = SPECIAL_VALUE;
@@ -299,7 +299,7 @@ namespace {
         stack<forward_stub> st;
         forward_stub& stub = st.emplace(SPECIAL_VALUE);
         EXPECT_EQ(st.top().n, SPECIAL_VALUE);
-        stub.n++;
+        ++stub.n;
         EXPECT_EQ(st.top().n, SPECIAL_VALUE + 1);
     }
 

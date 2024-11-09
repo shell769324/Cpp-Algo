@@ -9,6 +9,10 @@ namespace {
     using namespace algo;
     class vector_test : public ::testing::Test {
     protected:
+        static void SetUpTestCase() {
+            std::srand(7759);
+        }
+
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
         }
@@ -30,7 +34,7 @@ namespace {
     template<typename T>
     void test_vec_std_vec_equality(vector<T>& vec, std::vector<T>& std_vec) {
         EXPECT_EQ(vec.size(), std_vec.size());
-        for (std::size_t i = 0; i < vec.size(); i++) {
+        for (std::size_t i = 0; i < vec.size(); ++i) {
             EXPECT_EQ(vec[i], std_vec[i]);
         }
     }
@@ -73,7 +77,7 @@ namespace {
         vector<constructor_stub> vec(MEDIUM_LIMIT);
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         vector<constructor_stub> vec_copy(vec);
-        for (int i = 0; i < MEDIUM_LIMIT * 2; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT * 2; ++i) {
             vec_copy.emplace_back(i);
             std_vec.emplace_back(i);
         }
@@ -117,7 +121,7 @@ namespace {
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         vector<constructor_stub> vec_copy;
         vec_copy = vec;
-        for (int i = 0; i < MEDIUM_LIMIT * 2; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT * 2; ++i) {
             vec_copy.emplace_back(i);
             std_vec.emplace_back(i);
         }
@@ -163,20 +167,20 @@ namespace {
 
     TEST_F(vector_test, push_back_primitive_stress_test) {
         vector<int> vec;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             vec.push_back(i);
         }
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             EXPECT_EQ(vec[i], i);
         }
     }
 
     TEST_F(vector_test, push_back_stress_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             vec.push_back(constructor_stub(i));
         }
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             EXPECT_EQ(vec[i].id, i);
         }
     }
@@ -195,10 +199,10 @@ namespace {
 
     TEST_F(vector_test, pop_back_stress_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             vec.push_back(constructor_stub());
         }
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             vec.pop_back();
         }
         
@@ -209,14 +213,14 @@ namespace {
         std::vector<constructor_stub> vec_copy;
         int rep = 20;
         int limit = 1000;
-        for (int i = 0; i < rep; i++) {
-            for (int j = 0; j < limit; j++) {
+        for (int i = 0; i < rep; ++i) {
+            for (int j = 0; j < limit; ++j) {
                 constructor_stub constructor_stub;
                 vec.push_back(constructor_stub);
                 vec_copy.push_back(constructor_stub);
             }
             std::size_t half_size = vec.size() / 2;
-            for (std::size_t j = 0; j < half_size; j++) {
+            for (std::size_t j = 0; j < half_size; ++j) {
                 vec.pop_back();
                 vec_copy.pop_back();
             }
@@ -241,11 +245,11 @@ namespace {
 
     TEST_F(vector_test, size_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             vec.push_back(constructor_stub());
             EXPECT_EQ(vec.size(), i + 1);
         }
-        for (int i = 0; i < LIMIT; i++) {
+        for (int i = 0; i < LIMIT; ++i) {
             vec.pop_back();
             EXPECT_EQ(vec.size(), LIMIT - i - 1);
         }
@@ -253,7 +257,7 @@ namespace {
 
     TEST_F(vector_test, front_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(constructor_stub(i));
         }
         EXPECT_EQ(vec.front().id, 0);
@@ -261,7 +265,7 @@ namespace {
 
     TEST_F(vector_test, back_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(constructor_stub(i));
         }
         EXPECT_EQ(vec.back().id, SMALL_LIMIT - 1);
@@ -269,7 +273,7 @@ namespace {
 
     TEST_F(vector_test, front_alias_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(constructor_stub(i));
         }
         vec.front().id = SPECIAL_VALUE;
@@ -278,7 +282,7 @@ namespace {
 
     TEST_F(vector_test, back_alias_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(constructor_stub(i));
         }
         vec.back().id = SPECIAL_VALUE;
@@ -290,7 +294,7 @@ namespace {
         std::vector<int> src;
         src.resize(BIG_PRIME);
         // Multiples of coprime numbers should complete the congruence class of each
-        for (int i = 0, j = 0; i < BIG_PRIME; i++, j = (j + SMALL_PRIME) % BIG_PRIME) {
+        for (int i = 0, j = 0; i < BIG_PRIME; ++i, j = (j + SMALL_PRIME) % BIG_PRIME) {
             src[j] = i;
         }
         while(!src.empty()) {
@@ -298,25 +302,54 @@ namespace {
             src.pop_back();
         }
         std::sort(vec.begin(), vec.end());
-        for (std::size_t i = 0; i < vec.size(); i++) {
+        for (std::size_t i = 0; i < vec.size(); ++i) {
             EXPECT_EQ(vec[i], i);
         }
     }
 
     TEST_F(vector_test, cbegin_cend_test) {
         vector<int> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(i);
         }
         auto const_it = vec.cbegin();
-        for (int i = 0; const_it != vec.cend(); i++, const_it++) {
+        for (int i = 0; const_it != vec.cend(); ++i, ++const_it) {
             EXPECT_EQ(i, *const_it);
+        }
+    }
+
+    TEST_F(vector_test, rbegin_rend_test) {
+        vector<int> vec;
+        std::vector<int> src;
+        src.resize(BIG_PRIME);
+        // Multiples of coprime numbers should complete the congruence class of each
+        for (int i = 0, j = 0; i < BIG_PRIME; ++i, j = (j + SMALL_PRIME) % BIG_PRIME) {
+            src[j] = i;
+        }
+        while(!src.empty()) {
+            vec.push_back(src.back());
+            src.pop_back();
+        }
+        std::sort(vec.rbegin(), vec.rend());
+        for (std::size_t i = 0; i < vec.size(); ++i) {
+            EXPECT_EQ(vec[i], vec.size() - i - 1);
+        }
+    }
+
+    TEST_F(vector_test, crbegin_crend_test) {
+        vector<int> vec;
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
+            vec.push_back(i);
+        }
+        auto const_it = vec.crbegin();
+        for (int i = 0; const_it != vec.crend(); ++i, ++const_it) {
+            EXPECT_EQ(SMALL_LIMIT - i - 1, *const_it);
         }
     }
 
     TEST_F(vector_test, foreach_loop_test) {
         vector<int> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(i);
         }
         for (int& num : vec) {
@@ -325,26 +358,26 @@ namespace {
         int i = 1;
         for (int& num : vec) {
             EXPECT_EQ(num, i);
-            i++;
+            ++i;
         }
     }
 
     TEST_F(vector_test, const_foreach_loop_test) {
         vector<int> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(i);
         }
         vector<int> immutable_vec(vec);
         int i = 0;
         for (const int& num : vec) {
             EXPECT_EQ(num, i);
-            i++;
+            ++i;
         }
     }
 
     TEST_F(vector_test, clear_test) {
         vector<int> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(i);
         }
         vec.clear();
@@ -353,19 +386,19 @@ namespace {
 
     TEST_F(vector_test, insert_single_basic_primitive_test) {
         vector<int> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(i);
         }
         vec.insert(vec.begin(), SPECIAL_VALUE);
         EXPECT_EQ(vec[0], SPECIAL_VALUE);
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             EXPECT_EQ(vec[i + 1], i);
         }
     }
 
     TEST_F(vector_test, insert_single_return_value_test) {
         vector<int> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(i);
         }
         vector<int>::iterator it = vec.insert(vec.begin(), SPECIAL_VALUE);
@@ -375,12 +408,12 @@ namespace {
 
     TEST_F(vector_test, insert_single_basic_test) {
         vector<constructor_stub> vec;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(constructor_stub(i));
         }
         vec.insert(vec.begin(), constructor_stub(SPECIAL_VALUE));
         EXPECT_EQ(vec[0].id, SPECIAL_VALUE);
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             EXPECT_EQ(vec[i + 1].id, i);
         }
     }
@@ -388,11 +421,11 @@ namespace {
     TEST_F(vector_test, insert_single_stress_test) {
         vector<int> vec;
         std::vector<int> std_vec;
-        for (int i = 0; i < MEDIUM_PRIME; i++) {
+        for (int i = 0; i < MEDIUM_PRIME; ++i) {
             vec.push_back(i);
             std_vec.push_back(i);
         }
-        for (int i = 0, j = 0; i < MEDIUM_PRIME; i++, j = (j + SMALL_PRIME) % MEDIUM_PRIME) {
+        for (int i = 0, j = 0; i < MEDIUM_PRIME; ++i, j = (j + SMALL_PRIME) % MEDIUM_PRIME) {
             vec.insert(vec.begin() + j, SPECIAL_VALUE);
             std_vec.insert(std_vec.begin() + j, SPECIAL_VALUE);
         }
@@ -426,7 +459,7 @@ namespace {
             constructor_stub(SPECIAL_VALUE), constructor_stub(~SPECIAL_VALUE),
             constructor_stub(SPECIAL_VALUE2), constructor_stub(~SPECIAL_VALUE2)};
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
-        for (int i = 0, pos = 0; i < MEDIUM_LIMIT; i++, pos = (pos + SMALL_PRIME) % vec.size()) {
+        for (int i = 0, pos = 0; i < MEDIUM_LIMIT; ++i, pos = (pos + SMALL_PRIME) % vec.size()) {
             vec.insert(vec.begin() + pos, src.begin(), src.end());
             std_vec.insert(std_vec.begin() + pos, src.begin(), src.end());
         }
@@ -457,7 +490,7 @@ namespace {
     TEST_F(vector_test, insert_range_input_iterator_stress_test) {
         vector<constructor_stub> vec(SMALL_LIMIT);
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
-        for (int i = 0, pos = 0; i < MEDIUM_LIMIT; i++, pos = (pos + SMALL_PRIME) % vec.size()) {
+        for (int i = 0, pos = 0; i < MEDIUM_LIMIT; ++i, pos = (pos + SMALL_PRIME) % vec.size()) {
             vec.insert(vec.begin() + pos, stub_iterator<constructor_stub>(SPECIAL_VALUE),
                 stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT));
             std_vec.insert(std_vec.begin() + pos, stub_iterator<constructor_stub>(SPECIAL_VALUE),
@@ -477,7 +510,7 @@ namespace {
 
     TEST_F(vector_test, erase_single_return_value_test) {
         vector<constructor_stub> vec(SMALL_LIMIT);
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec[i].id = i;
         }
         int idx = SMALL_LIMIT / 2;
@@ -489,12 +522,12 @@ namespace {
     TEST_F(vector_test, erase_single_stress_test) {
         vector<int> vec;
         std::vector<int> std_vec;
-        for (int i = 0; i < MEDIUM_PRIME; i++) {
+        for (int i = 0; i < MEDIUM_PRIME; ++i) {
             vec.push_back(i);
             std_vec.push_back(i);
         }
         int left_size = MEDIUM_LIMIT / 2;
-        for (int i = 0, j = 0; i < left_size; i++, j = (j + SMALL_PRIME) % std_vec.size()) {
+        for (int i = 0, j = 0; i < left_size; ++i, j = (j + SMALL_PRIME) % std_vec.size()) {
             vec.erase(vec.begin() + j);
             std_vec.erase(std_vec.begin() + j);
         }

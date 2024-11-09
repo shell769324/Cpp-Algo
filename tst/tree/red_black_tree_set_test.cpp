@@ -10,9 +10,12 @@ namespace {
     using namespace algo;
     class red_black_tree_set_test : public ::testing::Test {
     protected:
+        static void SetUpTestCase() {
+            std::srand(7759);
+        }
+
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
-            std::srand(7759);
         }
 
         virtual void TearDown() {

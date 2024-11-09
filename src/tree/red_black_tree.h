@@ -704,7 +704,7 @@ public:
         }
         node_type* new_node = new node_type(value);
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-        element_count++;
+        ++element_count;
         fix_double_red(new_node);
         return std::make_pair(iterator(new_node), true);
     }
@@ -726,7 +726,7 @@ public:
         }
         node_type* new_node = new node_type(std::move(value));
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-        element_count++;
+        ++element_count;
         fix_double_red(new_node);
         return std::make_pair(iterator(new_node), true);
     }
@@ -743,7 +743,7 @@ public:
 
         // Populate ancestors' heights and rebalance
         fix_double_red(new_node);
-        element_count++;
+        ++element_count;
         return std::make_pair(iterator(new_node), true);
     }
 
@@ -758,7 +758,7 @@ public:
 
         // Populate ancestors' heights and rebalance
         fix_double_red(new_node);
-        element_count++;
+        ++element_count;
         return std::make_pair(iterator(new_node), true);
     }
 
@@ -771,7 +771,7 @@ public:
      */
     template<std::input_iterator InputIt>
     void insert(InputIt first, InputIt last) {
-        for (auto it = first; it != last; it++) {
+        for (InputIt it = first; it != last; ++it) {
             insert(*it);
         }
     }

@@ -21,9 +21,12 @@ namespace {
     using namespace algo;
     class red_black_tree_test : public ::testing::Test {
     protected:
+        static void SetUpTestCase() {
+            std::srand(7759);
+        }
+
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
-            std::srand(7759);
         }
 
         virtual void TearDown() {
@@ -393,7 +396,7 @@ namespace {
 
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
-        for (unsigned int i = 0; i < copy_stubs.size(); i++) {
+        for (std::size_t i = 0; i < copy_stubs.size(); ++i) {
             constructor_stub stub(copy_stubs[i].id + 1);
             if (i == copy_stubs.size() - 1 || stub.id != copy_stubs[i + 1].id) {
                 split_test<uid_resolver>(tree, stub, uid_resolver(), false);
@@ -407,7 +410,7 @@ namespace {
 
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
-        for (unsigned int i = 0; i < copy_stubs.size(); i++) {
+        for (std::size_t i = 0; i < copy_stubs.size(); ++i) {
             constructor_stub stub(copy_stubs[i].id);
             split_test<uid_resolver>(tree, stub, uid_resolver(), true, stub.uid < copy_stubs[i].uid);
         }
@@ -419,7 +422,7 @@ namespace {
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
         int skip = copy_stubs.size() / REPEAT;
-        for (unsigned int i = 0; i < copy_stubs.size(); i += skip) {
+        for (std::size_t i = 0; i < copy_stubs.size(); i += skip) {
             constructor_stub stub(copy_stubs[i].id + 1);
             if (i == copy_stubs.size() - 1 || stub.id != copy_stubs[i + 1].id) {
                 split_test<uid_resolver>(tree, stub, uid_resolver(), false);

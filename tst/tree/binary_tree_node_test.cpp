@@ -377,7 +377,7 @@ namespace {
     TEST_F(binary_tree_node_test, next_test) {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         iterable_node<constructor_stub>* curr = root -> get_leftmost_descendant();
-        for (int i = 0; i < SMALL_LIMIT - 1; i++) {
+        for (int i = 0; i < SMALL_LIMIT - 1; ++i) {
             EXPECT_EQ(curr -> value.id, i);
             curr = curr -> next();
         }
@@ -387,7 +387,7 @@ namespace {
     TEST_F(binary_tree_node_test, prev_test) {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         iterable_node<constructor_stub>* curr = root -> get_rightmost_descendant();
-        for (int i = SMALL_LIMIT - 2; i >= 0; i--) {
+        for (int i = SMALL_LIMIT - 2; i >= 0; --i) {
             EXPECT_EQ(curr -> value.id, i);
             curr = curr -> prev();
         }

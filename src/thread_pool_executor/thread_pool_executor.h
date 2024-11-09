@@ -46,7 +46,7 @@ public:
         }
         task_wrappers.push(std::move(wrapper));
         if (waiting_count > 0) {
-            waiting_count--;
+            --waiting_count;
             condvar.notify_one();
         }
     }
@@ -67,7 +67,7 @@ public:
         }
         task_wrappers.push(std::move(wrapper));
         if (waiting_count > 0) {
-            waiting_count--;
+            --waiting_count;
             condvar.notify_one();
         }
     }
@@ -76,7 +76,7 @@ private:
 
     void activate(std::unique_lock<std::mutex>& lock) {
         alive = true;
-        for (unsigned i = 0; i < thread_count; i++) {
+        for (std::size_t i = 0; i < thread_count; ++i) {
             std::thread th(thread_func, this);
             threads.push_back(std::move(th));
         }
@@ -94,7 +94,7 @@ private:
                 tasks_unique_lock.unlock();
                 task_wrapper();
             } else {
-                executor.waiting_count++;
+                ++executor.waiting_count;
                 if (!ready) {
                     if (executor.waiting_count == executor.thread_count) {
                         executor.condvar.notify_all();

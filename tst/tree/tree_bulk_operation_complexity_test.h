@@ -60,7 +60,7 @@ namespace {
             durations.push_back(duration);
         }
         std::vector<double> bigO;
-        for (std::size_t i = 0; i < sizes.size(); i++) {
+        for (std::size_t i = 0; i < sizes.size(); ++i) {
             bigO.push_back(sizes[i] * std::log((double) tree1.size() / sizes[i] + 1));
         }
         std::cout << "Correlation: " << correlation(bigO, durations) << std::endl;
@@ -113,7 +113,7 @@ namespace {
             durations.push_back(duration);
         }
         std::vector<double> bigO;
-        for (std::size_t i = 0; i < sizes.size(); i++) {
+        for (std::size_t i = 0; i < sizes.size(); ++i) {
             bigO.push_back(sizes[i] * std::log((double) tree1.size() / sizes[i] + 1));
         }
         std::cout << "Correlation: " << correlation(bigO, durations) << std::endl;
@@ -166,7 +166,7 @@ namespace {
             durations.push_back(duration);
         }
         std::vector<double> bigO;
-        for (std::size_t i = 0; i < sizes.size(); i++) {
+        for (std::size_t i = 0; i < sizes.size(); ++i) {
             bigO.push_back(sizes[i] * std::log((double) tree1.size() / sizes[i] + 1));
         }
         std::cout << "Correlation: " << correlation(bigO, durations) << std::endl;

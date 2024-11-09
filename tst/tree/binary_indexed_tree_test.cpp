@@ -35,9 +35,9 @@ namespace {
     static const auto square_matrix_multiply = 
     [](const matrix_t& A, const matrix_t& B) {
         matrix_t res(A.size(), std::vector<long double>(B[0].size(), 0));
-        for (int i = 0; i < A.size(); i++) {
-            for (int j = 0; j < A[0].size(); j++) {
-                for (int k = 0; k < A[0].size(); k++) {
+        for (std::size_t i = 0; i < A.size(); ++i) {
+            for (std::size_t j = 0; j < A[0].size(); ++j) {
+                for (std::size_t k = 0; k < A[0].size(); ++k) {
                     res[i][j] += A[i][k] * B[k][j];
                 }
             }
@@ -54,8 +54,6 @@ namespace {
             }
         }
         if (operand.second) {
-            //print2dVec(inverse);
-            //print2dVec(product);
             return square_matrix_multiply(inverse, product);
         }
         return square_matrix_multiply(product, inverse);
@@ -71,8 +69,8 @@ namespace {
         if (mat1.size() != mat2.size()) {
             return false;
         }
-        for (int i = 0; i < mat1.size(); i++) {
-            for (int j = 0; j < mat1[0].size(); j++) {
+        for (std::size_t i = 0; i < mat1.size(); ++i) {
+            for (std::size_t j = 0; j < mat1[0].size(); ++j) {
                 if (abs(mat2[i][j] - mat1[i][j]) / std::min(abs(mat1[i][j]), abs(mat2[i][j])) >= 1e-3 &&
                     abs(mat2[i][j] - mat1[i][j]) > 1e-5) {
                     return false;
@@ -99,8 +97,8 @@ namespace {
 
     TEST_F(binary_indexed_tree_test, default_constructor_test) {
         plus_tree tree(SMALL_LIMIT, std::plus<int>(), plus_inverse);
-        for (int i = 0; i < tree.size(); i++) {
-            for (int j = i; j < tree.size(); j++) {
+        for (std::size_t i = 0; i < tree.size(); ++i) {
+            for (std::size_t j = i; j < tree.size(); ++j) {
                 EXPECT_EQ(tree.query(i, j), 0);
             }
         }
@@ -108,8 +106,8 @@ namespace {
 
     TEST_F(binary_indexed_tree_test, fill_constructor_test) {
         plus_tree tree(SMALL_LIMIT, 1, std::plus<int>(), plus_inverse);
-        for (int i = 0; i < tree.size(); i++) {
-            for (int j = i; j < tree.size(); j++) {
+        for (std::size_t i = 0; i < tree.size(); ++i) {
+            for (std::size_t j = i; j < tree.size(); ++j) {
                 EXPECT_EQ(tree.query(i, j), j - i);
             }
         }
@@ -118,8 +116,8 @@ namespace {
     TEST_F(binary_indexed_tree_test, copy_constructor_test) {
         plus_tree tree(SMALL_LIMIT, 1, std::plus<int>(), plus_inverse);
         plus_tree tree_copy(tree);
-        for (int i = 0; i < tree_copy.size(); i++) {
-            for (int j = i; j < tree_copy.size(); j++) {
+        for (std::size_t i = 0; i < tree_copy.size(); ++i) {
+            for (std::size_t j = i; j < tree_copy.size(); ++j) {
                 EXPECT_EQ(tree_copy.query(i, j), j - i);
             }
         }
@@ -128,18 +126,32 @@ namespace {
     TEST_F(binary_indexed_tree_test, move_constructor_test) {
         plus_tree tree(SMALL_LIMIT, 1, std::plus<int>(), plus_inverse);
         plus_tree tree_copy(std::move(tree));
-        for (int i = 0; i < tree_copy.size(); i++) {
-            for (int j = i; j < tree_copy.size(); j++) {
+        for (std::size_t i = 0; i < tree_copy.size(); ++i) {
+            for (std::size_t j = i; j < tree_copy.size(); ++j) {
                 EXPECT_EQ(tree_copy.query(i, j), j - i);
             }
         }
         EXPECT_EQ(tree.size(), 0);
     }
 
+    TEST_F(binary_indexed_tree_test, range_constructor_test) {
+        std::vector<int> nums(SMALL_LIMIT);
+        for (int& num : nums) {
+            num = int_distribution(generator);
+        }
+        plus_tree tree(nums.begin(), nums.end(), std::plus<int>(), plus_inverse);
+        EXPECT_EQ(tree.size(), nums.size());
+        for (std::size_t i = 0; i < tree.size(); ++i) {
+            for (std::size_t j = i; j < tree.size(); ++j) {
+                EXPECT_EQ(tree.query(i, j), std::accumulate(nums.begin() + i, nums.begin() + j, 0));
+            }
+        }
+    }
+
     TEST_F(binary_indexed_tree_test, query_basic_test) {
         matrix_mult_tree tree(SMALL_LIMIT, square_matrix_multiply, square_matrix_multiply_inverse, identity_matrix);
-        for (int i = 0; i < tree.size(); i++) {
-            for (int j = i; j < tree.size(); j++) {
+        for (std::size_t i = 0; i < tree.size(); ++i) {
+            for (std::size_t j = i; j < tree.size(); ++j) {
                 EXPECT_TRUE(is_square_matrix_equal(tree.query(i, j), identity_matrix));
             }
         }
@@ -147,10 +159,10 @@ namespace {
 
     TEST_F(binary_indexed_tree_test, update_basic_test) {
         matrix_mult_tree tree(SMALL_LIMIT, square_matrix_multiply, square_matrix_multiply_inverse, identity_matrix);
-        int pos = SMALL_LIMIT / 2;
+        std::size_t pos = SMALL_LIMIT / 2;
         tree.update(pos, mat1);
-        for (int i = 0; i < tree.size(); i++) {
-            for (int j = i; j < tree.size(); j++) {
+        for (std::size_t i = 0; i < tree.size(); ++i) {
+            for (std::size_t j = i; j < tree.size(); ++j) {
                 if (i <= pos && pos < j) {
                     EXPECT_TRUE(is_square_matrix_equal(tree.query(i, j), mat1));
                 } else {
@@ -163,7 +175,7 @@ namespace {
     TEST_F(binary_indexed_tree_test, update_intermediate_test) {
         matrix_mult_tree tree(SMALL_LIMIT, square_matrix_multiply, square_matrix_multiply_inverse, identity_matrix);
         std::vector<matrix_t> mats;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (std::size_t i = 0; i < SMALL_LIMIT; ++i) {
             if (i % 3 == 0) {
                 mats.push_back(identity_matrix);
             } else if (i % 3 == 1) {
@@ -174,10 +186,10 @@ namespace {
                 tree.update(i, mat2);
             }
         }
-        for (int i = 0; i < tree.size(); i++) {
-            for (int j = i; j < tree.size(); j++) {
+        for (std::size_t i = 0; i < tree.size(); ++i) {
+            for (std::size_t j = i; j < tree.size(); ++j) {
                 matrix_t expected(identity_matrix);
-                for (int k = i; k < j; k++) {
+                for (std::size_t k = i; k < j; ++k) {
                     expected = square_matrix_multiply(expected, mats[k]);
                 }
                 EXPECT_TRUE(is_square_matrix_equal(tree.query(i, j), expected));
@@ -188,16 +200,16 @@ namespace {
     TEST_F(binary_indexed_tree_test, update_stress_matrix_mult_test) {
         matrix_mult_tree tree(MEDIUM_LIMIT, square_matrix_multiply, square_matrix_multiply_inverse, identity_matrix);
         std::vector<matrix_t> mats(MEDIUM_LIMIT);
-        for (int i = 0; i < MEDIUM_LIMIT; i++) {
+        for (std::size_t i = 0; i < MEDIUM_LIMIT; ++i) {
             matrix_t mat = getRandomRotationMatrix();
             mats[i] = mat;
             tree.update(i, mat);
         }
         int jump = 3;
-        for (int i = 0; i < tree.size(); i += jump) {
-            for (int j = i; j < tree.size(); j += jump) {
+        for (std::size_t i = 0; i < tree.size(); i += jump) {
+            for (std::size_t j = i; j < tree.size(); j += jump) {
                 matrix_t expected(identity_matrix);
-                for (int k = i; k < j; k++) {
+                for (std::size_t k = i; k < j; ++k) {
                     expected = square_matrix_multiply(expected, mats[k]);
                 }
                 EXPECT_TRUE(is_square_matrix_equal(tree.query(i, j), expected));
@@ -208,14 +220,14 @@ namespace {
     TEST_F(binary_indexed_tree_test, update_stress_addition_test) {
         plus_tree tree(BIG_LIMIT, std::plus<int>(), plus_inverse);
         std::vector<int> nums(BIG_LIMIT);
-        for (int i = 0; i < BIG_LIMIT; i++) {
+        for (std::size_t i = 0; i < BIG_LIMIT; ++i) {
             nums[i] = int_distribution(generator);
             tree.update(i, nums[i]);
         }
         std::vector<int> prefix_sum(BIG_LIMIT);
         std::partial_sum(nums.begin(), nums.end(), prefix_sum.begin());
-        for (int i = 0; i < tree.size(); i++) {
-            for (int j = i; j < tree.size(); j++) {
+        for (std::size_t i = 0; i < tree.size(); ++i) {
+            for (std::size_t j = i; j < tree.size(); ++j) {
                 int sum = i == j ? 0 : (prefix_sum[j - 1] - (i == 0 ? 0 : prefix_sum[i - 1]));
                 EXPECT_EQ(tree.query(i, j), sum);
             }
@@ -225,7 +237,7 @@ namespace {
     TEST_F(binary_indexed_tree_test, mixed_matrix_mult_test) {
         matrix_mult_tree tree(MEDIUM_LIMIT, square_matrix_multiply, square_matrix_multiply_inverse, identity_matrix);
         std::vector<matrix_t> mats(tree.size(), identity_matrix);
-        for (int i = 0; i < HUGE_LIMIT; i++) {
+        for (std::size_t i = 0; i < HUGE_LIMIT; ++i) {
             int lottery = int_distribution(generator) % 2;
             if (lottery) {
                 // update
@@ -241,7 +253,7 @@ namespace {
                     std::swap(idx1, idx2);
                 }
                 matrix_t expected(identity_matrix);
-                for (int j = idx1; j < idx2; j++) {
+                for (int j = idx1; j < idx2; ++j) {
                     expected = square_matrix_multiply(expected, mats[j]);
                 }
                 EXPECT_TRUE(is_square_matrix_equal(tree.query(idx1, idx2), expected));
@@ -252,7 +264,7 @@ namespace {
     TEST_F(binary_indexed_tree_test, mixed_addition_test) {
         plus_tree tree(HUGE_LIMIT, std::plus<int>(), plus_inverse);
         std::vector<int> nums(tree.size());
-        for (int i = 0; i < HUGE_LIMIT; i++) {
+        for (std::size_t i = 0; i < HUGE_LIMIT; ++i) {
             int lottery = int_distribution(generator) % 2;
             if (lottery) {
                 // update
@@ -267,11 +279,7 @@ namespace {
                 if (idx1 > idx2) {
                     std::swap(idx1, idx2);
                 }
-                int expected = 0;
-                for (int j = idx1; j < idx2; j++) {
-                    expected += nums[j];
-                }
-                EXPECT_EQ(tree.query(idx1, idx2), expected);
+                EXPECT_EQ(tree.query(idx1, idx2), std::accumulate(nums.begin() + idx1, nums.begin() + idx2, 0));
             }
         }
     }

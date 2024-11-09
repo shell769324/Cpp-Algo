@@ -217,7 +217,7 @@ namespace {
         D -> link_right_child(E);
         P -> link_right_child(D);
         int old_constructor_invocation_count = constructor_stub::constructor_invocation_count;
-        for (int i = 0; i < SMALL_LIMIT; i++) {
+        for (int i = 0; i < SMALL_LIMIT; ++i) {
             D -> rotate_right();
             B -> rotate_left();
         }

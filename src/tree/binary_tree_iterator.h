@@ -70,7 +70,7 @@ private:
     /**
      * @brief Construct a tree iterator from its const counterpart
      * 
-     * This constructor is private to disallow users from break constness of iterator
+     * This constructor is private to disallow users from breaking constness of iterator
      * It is also declared explicit to
      * 1) prevent implicitly calling this dangerous conversion
      * 2) resolve ambiguity of the equality operator overload. Note that if this is not explicit,
@@ -177,9 +177,11 @@ public:
     // Ideally the value type V should be T but cpp doesn't allow partially
     // specialized template friend class
     template <typename K, typename V, typename KeyOf, typename Comparator>
+    requires binary_tree_definable<K, V, KeyOf, Comparator>
     friend class avl_tree;
 
     template <typename K, typename V, typename KeyOf, typename Comparator>
+    requires binary_tree_definable<K, V, KeyOf, Comparator>
     friend class red_black_tree;
 
     // const and non-const iterator of the same base type are friends

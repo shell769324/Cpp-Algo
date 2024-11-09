@@ -49,7 +49,7 @@ namespace {
         int repeat = 35;
         thread_pool_executor executor(1);
         vector<std::future<int> > futures;
-        for (int i = 0; i < repeat; i++) {
+        for (int i = 0; i < repeat; ++i) {
             int res = fibonacci(start);
             EXPECT_EQ(res, dp_fibonacci(start));
         }
@@ -59,13 +59,13 @@ namespace {
         int repeat = 35;
         thread_pool_executor executor;
         vector<std::future<int> > futures;
-        for (int i = 0; i < repeat; i++) {
+        for (int i = 0; i < repeat; ++i) {
             task<int> fibonacci_task(fibonacci, start);
             std::future<int> future = fibonacci_task.get_future();
             futures.push_back(std::move(future));
             executor.execute(std::move(fibonacci_task));
         }
-        for (int i = 0; i < repeat; i++) {
+        for (int i = 0; i < repeat; ++i) {
             int res = futures[i].get();
             EXPECT_EQ(res, dp_fibonacci(start));
         }

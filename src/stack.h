@@ -159,7 +159,7 @@ public:
      */
     template<class InputIt>
     stack(InputIt first, InputIt last) : stack() {
-        for (auto it = first; it != last; it++) {
+        for (auto it = first; it != last; ++it) {
             push(*it);
         }
     }
@@ -251,7 +251,7 @@ public:
             resize_buffer(capacity * 2);
         }
         new(data + length) T(value);
-        length++;
+        ++length;
     }
 
     /**
@@ -267,7 +267,7 @@ public:
             resize_buffer(capacity * 2);
         }
         new(data + length) T(std::move(value));
-        length++;
+        ++length;
     }
 
     /**
@@ -292,7 +292,7 @@ public:
      * @brief Remove the last element in the stack and destroy it
      */
     void pop() {
-        length--;
+        --length;
         data[length].~T();
         if (length == capacity / 4) {
             resize_buffer(std::max(capacity / 2, DEFAULT_CAPACITY));

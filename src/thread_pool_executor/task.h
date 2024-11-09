@@ -9,6 +9,8 @@ namespace algo {
 class task_model {
 public:
     virtual void operator()() = 0;
+
+    virtual ~task_model() = default;
 };
 
 template<typename R>

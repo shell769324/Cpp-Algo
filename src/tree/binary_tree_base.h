@@ -299,7 +299,7 @@ public:
         if (begin == end) {
             return true;
         }
-        for (ForwardIt it = begin; std::next(it) != end; it++) {
+        for (ForwardIt it = begin; std::next(it) != end; ++it) {
             ForwardIt successor = std::next(it);
             if (this -> key_comp(this -> key_of(*it), this -> key_of(*successor)) > 0) {
                 std::cout << "is_inorder failure" << std::endl;

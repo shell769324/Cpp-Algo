@@ -8,6 +8,7 @@
 #include "binary_tree_iterator.h"
 #include "src/common.h"
 #include <optional>
+#include <utility>
 
 namespace algo {
 
@@ -61,6 +62,11 @@ public:
         avl_node* node_clone = new avl_node(this -> value);
         node_clone -> height = height;
         return node_clone;
+    }
+
+    void fill(avl_node* other) const requires std::is_copy_constructible_v<T> {
+        other -> height = height;
+        other -> value = this -> value;
     }
 
     friend bool should_parallelize(avl_node* node1, avl_node* node2) {
@@ -558,7 +564,7 @@ public:
      */
     template<std::input_iterator InputIt>
     void insert(InputIt first, InputIt last) {
-        for (auto it = first; it != last; it++) {
+        for (auto it = first; it != last; ++it) {
             insert(*it);
         }
     }
@@ -582,7 +588,7 @@ public:
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
         // Populate ancestors' heights and rebalance
         adjust_after_insertion(new_node);
-        element_count++;
+        ++element_count;
         return std::make_pair(iterator(new_node), true);
     }
 
@@ -605,7 +611,7 @@ public:
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
         // Populate ancestors' heights and rebalance
         adjust_after_insertion(new_node);
-        element_count++;
+        ++element_count;
         return std::make_pair(iterator(new_node), true);
     }
 
@@ -634,7 +640,7 @@ public:
 
         // Populate ancestors' heights and rebalance
         adjust_after_insertion(new_node);
-        element_count++;
+        ++element_count;
         return std::make_pair(iterator(new_node), true);
     }
 
@@ -662,7 +668,7 @@ public:
 
         // Populate ancestors' heights and rebalance
         adjust_after_insertion(new_node);
-        element_count++;
+        ++element_count;
         return std::make_pair(iterator(new_node), true);
     }
 
@@ -812,7 +818,7 @@ public:
     iterator erase(iterator pos) {
         iterator res = extract(pos, sentinel.get());
         delete static_cast<node_type*>(pos.node);
-        element_count--;
+        --element_count;
         return res;
     }
 

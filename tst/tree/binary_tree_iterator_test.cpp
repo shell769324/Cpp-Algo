@@ -37,7 +37,7 @@ namespace {
         std::unique_ptr<node_type> node_ptr = std::make_unique<node_type>();
         node_iterator it(node_ptr.get());
         EXPECT_EQ((*it).id, node_ptr -> value.id);
-        (*it).id++;
+        ++(*it).id;
         EXPECT_EQ((*it).id, node_ptr -> value.id);
     }
 
@@ -52,7 +52,7 @@ namespace {
         std::unique_ptr<node_type> node_ptr = std::make_unique<node_type>();
         node_iterator it(node_ptr.get());
         EXPECT_EQ(it -> id, node_ptr -> value.id);
-        it -> id++;
+        ++it -> id;
         EXPECT_EQ(it -> id, node_ptr -> value.id);
     }
 
@@ -103,7 +103,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_leftmost_descendant();
         node_iterator it(curr);
-        for (int i = 0; it != node_iterator(); i++, ++it) {
+        for (int i = 0; it != node_iterator(); ++i, ++it) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -112,7 +112,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_rightmost_descendant();
         reverse_node_iterator it(curr);
-        for (int i = SMALL_LIMIT - 2; it != reverse_node_iterator(); i--, ++it) {
+        for (int i = SMALL_LIMIT - 2; it != reverse_node_iterator(); --i, ++it) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -121,7 +121,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_leftmost_descendant();
         node_iterator it(curr);
-        for (int i = 0; it != node_iterator(); i++, it++) {
+        for (int i = 0; it != node_iterator(); ++i, ++it) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -130,7 +130,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_rightmost_descendant();
         reverse_node_iterator it(curr);
-        for (int i = SMALL_LIMIT - 2; it != reverse_node_iterator(); i--, it++) {
+        for (int i = SMALL_LIMIT - 2; it != reverse_node_iterator(); --i, ++it) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -175,7 +175,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_rightmost_descendant();
         node_iterator it(curr);
-        for (int i = SMALL_LIMIT - 2; it != node_iterator(); i--, --it) {
+        for (int i = SMALL_LIMIT - 2; it != node_iterator(); --i, --it) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -184,7 +184,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_leftmost_descendant();
         reverse_node_iterator it(curr);
-        for (int i = 0; it != reverse_node_iterator(); i++, --it) {
+        for (int i = 0; it != reverse_node_iterator(); ++i, --it) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -193,7 +193,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_rightmost_descendant();
         node_iterator it(curr);
-        for (int i = SMALL_LIMIT - 2; it != node_iterator(); i--, it--) {
+        for (int i = SMALL_LIMIT - 2; it != node_iterator(); --i, it--) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -202,7 +202,7 @@ namespace {
         std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
         node_type* curr = root -> get_leftmost_descendant();
         reverse_node_iterator it(curr);
-        for (int i = 0; it != reverse_node_iterator(); i++, it--) {
+        for (int i = 0; it != reverse_node_iterator(); ++i, --it) {
             EXPECT_EQ(it -> id, i);
         }
     }
@@ -219,7 +219,7 @@ namespace {
         Iterator it1(curr);
         Iterator it2(curr);
         EXPECT_EQ(it1, it2);
-        it2++;
+        ++it2;
         EXPECT_NE(it1, it2);
     }
 
@@ -245,7 +245,7 @@ namespace {
         const_node_iterator const_it(it);
         EXPECT_EQ(it, const_it);
         EXPECT_EQ(const_it, it);
-        it++;
+        ++it;
         EXPECT_NE(it, const_it);
         EXPECT_NE(const_it, it);
     }

@@ -19,6 +19,7 @@ public:
 
     int id;
     int uid;
+    unsigned long long magic;
 
     constructor_stub();
 
@@ -33,6 +34,8 @@ public:
     constructor_stub& operator=(constructor_stub&& other) noexcept;
 
     static void reset_constructor_destructor_counter() noexcept;
+    
+    bool is_valid() noexcept;
 
     ~constructor_stub() noexcept;
 };

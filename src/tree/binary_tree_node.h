@@ -18,9 +18,9 @@ private:
     /**
      * Non virtual interface (NVI) idiom because binary_tree_node_base class is a CRTP
      * class. Most of its methods return the underyling type for ease of use. If we use regular
-     * approach (virtual method and override), the return type of those methods will have to be a 
+     * approach (virtual method and override), the return type of those methods will have to be a
      * pointer to a subclass of iterable_node (covariant return type). However, the compiler doesn't
-     * know the derived class of binary_tree_node_base is actually derived class at the 
+     * know the derived class of binary_tree_node_base is actually derived class at the
      * instantiation of iterable_node because the derived class is still incomplete. That makes
      * covariant return type impossible.
      * 

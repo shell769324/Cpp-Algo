@@ -50,6 +50,19 @@ struct deleter {
     };
 };
 
+template<typename T>
+class safe_move_construct_deleter {
+private:
+    std::size_t length;
+public:
+    safe_move_construct_deleter(std::size_t length) : length(length) { }
+
+    void operator()(T* memory) {
+        std::destroy(memory, memory + length);
+        ::operator delete(memory);
+    };
+};
+
 /**
  * @brief Construct a copy of a given object on an address
  * 

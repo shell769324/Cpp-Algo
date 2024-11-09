@@ -40,9 +40,12 @@ namespace {
         public:
         thread_pool_executor executor;
         protected:
+        static void SetUpTestCase() {
+            std::srand(7759);
+        }
+
         virtual void SetUp() {
             constructor_stub::reset_constructor_destructor_counter();
-            std::srand(7759);
         }
 
         virtual void TearDown() {
@@ -68,7 +71,7 @@ namespace {
                 EXPECT_EQ(stub, stubs[i]);
                 EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(stub)>>,
                     std::is_const_v<Set>);
-                i++;
+                ++i;
             }
             check_constructor_counts();
             EXPECT_EQ(i, MEDIUM_LIMIT);
@@ -81,7 +84,7 @@ namespace {
             int i = 0;
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator(true));
             mark_constructor_counts();
-            for (auto it = set.rbegin(); it != set.rend(); it++, i++) {
+            for (auto it = set.rbegin(); it != set.rend(); ++it, ++i) {
                 EXPECT_EQ(*it, stubs[i]);
                 EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(*it)>>,
                     std::is_const_v<Set>);
@@ -101,12 +104,12 @@ namespace {
                 check_constructor_counts(0, 1, 0);
                 EXPECT_EQ(set.size(), i + 1);
                 if (i % skip == 0) {
-                    for (int j = 0; j <= i; j++) {
+                    for (int j = 0; j <= i; ++j) {
                         EXPECT_TRUE(set.contains(stubs[j]));
                     }
                     EXPECT_TRUE(set.is_valid());
                 }
-                i++;
+                ++i;
             }
         }
 
@@ -121,7 +124,7 @@ namespace {
                 mark_constructor_counts();
                 set.erase(stub);
                 check_constructor_counts();
-                curr_size--;
+                --curr_size;
                 //EXPECT_EQ(set.find(stub), set.cend());
                 //EXPECT_EQ(set.size(), curr_size);
                 if (curr_size % skip == 0 && size == 10) {
@@ -142,7 +145,7 @@ namespace {
                 EXPECT_NE(set.find(stub), set.end());
                 mark_constructor_counts();
                 it = set.erase(it);
-                curr_size--;
+                --curr_size;
                 check_constructor_counts();
                 EXPECT_EQ(set.find(stub), set.cend());
                 EXPECT_EQ(set.size(), curr_size);
@@ -161,11 +164,11 @@ namespace {
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
             Set& set = src;
             // With existing element
-            for (unsigned i = 0; i < stubs.size(); i++) {
+            for (unsigned i = 0; i < stubs.size(); ++i) {
                 EXPECT_EQ(*set.max_leq(stubs[i]), stubs[i]);
             }
             // With absent element
-            for (unsigned i = 0; i < stubs.size() - 1; i++) {
+            for (unsigned i = 0; i < stubs.size() - 1; ++i) {
                 if (stubs[i + 1].id - stubs[i].id >= 2) {
                     int num = (stubs[i + 1].id + stubs[i].id) / 2;
                     auto& stub = *set.max_leq(constructor_stub(num));
@@ -184,11 +187,11 @@ namespace {
             Set& set = src;
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
             // With existing element
-            for (unsigned i = 0; i < stubs.size(); i++) {
+            for (unsigned i = 0; i < stubs.size(); ++i) {
                 EXPECT_EQ(*set.min_geq(stubs[i]), stubs[i]);
             }
             // With absent element
-            for (unsigned i = 1; i < stubs.size(); i++) {
+            for (unsigned i = 1; i < stubs.size(); ++i) {
                 if (stubs[i].id - stubs[i - 1].id >= 2) {
                     int num = (stubs[i].id + stubs[i - 1].id) / 2;
                     auto& stub = *set.min_geq(constructor_stub(num));
@@ -397,7 +400,7 @@ namespace {
         int i = 0;
         std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
         mark_constructor_counts();
-        for (auto it = set.cbegin(); it != set.cend(); it++, i++) {
+        for (auto it = set.cbegin(); it != set.cend(); ++it, ++i) {
             EXPECT_EQ(*it, stubs[i]);
         }
         check_constructor_counts();
@@ -418,7 +421,7 @@ namespace {
         int i = 0;
         std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator(true));
         mark_constructor_counts();
-        for (auto it = set.crbegin(); it != set.crend(); it++, i++) {
+        for (auto it = set.crbegin(); it != set.crend(); ++it, ++i) {
             EXPECT_EQ(*it, stubs[i]);
         }
         check_constructor_counts();
@@ -497,7 +500,7 @@ namespace {
     TYPED_TEST_P(set_test, insert_range_test) {
         std::vector<typename TypeParam::value_type> stubs = get_random_stub_vector(SMALL_LIMIT);
         TypeParam set(stubs.begin(), stubs.end());
-        for (unsigned i = 0; i < stubs.size(); i++) {
+        for (unsigned i = 0; i < stubs.size(); ++i) {
             EXPECT_TRUE(set.contains(stubs[i]));
         }
         EXPECT_TRUE(set.is_valid());
@@ -601,12 +604,12 @@ namespace {
         auto it2 = set.find(stubs[trisect2]);
         EXPECT_EQ(set.erase(it1, it2), it2);
         EXPECT_EQ(set.size(), stubs.size() - (trisect2 - trisect1));
-        for (std::size_t i = trisect1; i < trisect2; i++) {
+        for (std::size_t i = trisect1; i < trisect2; ++i) {
             EXPECT_EQ(set.find(stubs[i]), set.end());
         }
         set.erase(it2, set.end());
         EXPECT_EQ(set.size(), trisect1);
-        for (std::size_t i = trisect2; i < stubs.size(); i++) {
+        for (std::size_t i = trisect2; i < stubs.size(); ++i) {
             EXPECT_EQ(set.find(stubs[i]), set.end());
         }
         set.erase(set.begin(), set.end());
@@ -717,7 +720,7 @@ namespace {
         TypeParam set1;
         TypeParam set2;
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stubs.size() / 2; i++) {
+        for (unsigned i = 0; i < stubs.size() / 2; ++i) {
             set1.insert(stubs[i]);
             unsigned reverse_index = stubs.size() - 1 - i;
             set2.insert(stubs[reverse_index]);
@@ -732,7 +735,7 @@ namespace {
         TypeParam set1;
         TypeParam set2;
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stubs.size() / 2; i++) {
+        for (unsigned i = 0; i < stubs.size() / 2; ++i) {
             set1.insert(stubs[i]);
             unsigned reverse_index = stubs.size() - 1 - i;
             set2.insert(stubs[reverse_index]);
@@ -749,7 +752,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+        for (unsigned i = 0; i < stubs.size() / 3; ++i) {
             set1.insert(stubs[i]);
             unsigned reverse_index = stubs.size() - 1 - i;
             set2.insert(stubs[reverse_index]);
@@ -766,7 +769,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+        for (unsigned i = 0; i < stubs.size() / 3; ++i) {
             set1.insert(stubs[i]);
             unsigned reverse_index = stubs.size() - 1 - i;
             set2.insert(stubs[reverse_index]);
@@ -812,7 +815,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = std::max<int>(1, stubs.size() / REPEAT);
-        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+        for (unsigned i = 0; i < stubs.size() / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -828,7 +831,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = std::max<int>(1, stubs.size() / REPEAT);
-        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+        for (unsigned i = 0; i < stubs.size() / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -844,7 +847,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -860,7 +863,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -905,7 +908,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = std::max<int>(1, stubs.size() / REPEAT);
-        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+        for (unsigned i = 0; i < stubs.size() / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -921,7 +924,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = std::max<int>(1, stubs.size() / REPEAT);
-        for (unsigned i = 0; i < stubs.size() / 3; i++) {
+        for (unsigned i = 0; i < stubs.size() / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -938,7 +941,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -954,7 +957,7 @@ namespace {
         TypeParam set1(stubs.begin() + share_start, stubs.begin() + share_end);
         TypeParam set2(stubs.begin() + share_start, stubs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             set1.insert(stubs[i]);
             set2.insert(stubs[stubs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -969,7 +972,7 @@ namespace {
         int SRTESS_LIMIT = 20000;
 
         std::set<constructor_stub, constructor_stub_comparator> stub_set;
-        for (int i = 0; i < SRTESS_LIMIT; i++) {
+        for (int i = 0; i < SRTESS_LIMIT; ++i) {
             int num = random_number(0, 4000);
             switch (do_action_lottery()) {
                 case LOOK_UP: {

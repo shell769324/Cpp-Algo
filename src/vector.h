@@ -5,6 +5,7 @@
 #include <concepts>
 #include <iostream>
 #include <algorithm>
+#include <iterator>
 #include "common.h"
 
 namespace algo {
@@ -22,7 +23,9 @@ public:
     using const_reference = const T&;
     using pointer = T*;
     using iterator = T*;
+    using reverse_iterator = std::reverse_iterator<iterator>;
     using const_iterator = const T*;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
 private:
     // The length of the portion of the data array that contain elements
@@ -199,7 +202,7 @@ public:
      * @param first the beginning of the range
      * @param last the end of the range
      */
-    template<typename InputIt>
+    template<std::input_iterator InputIt>
     vector(InputIt first, InputIt last) requires std::copy_constructible<T> : vector() {
         insert(data, first, last);
     }
@@ -229,7 +232,7 @@ public:
     /**
      * @brief Assignment operator
      * 
-     * Copy all elements from another vector into this one without modifying it
+     * Copy all elements from another vector into this one
      * 
      * Strong exception guarantee
      * 
@@ -324,6 +327,27 @@ public:
     }
 
     /**
+     * @brief Get a reverse iterator to the last element
+     */
+    reverse_iterator rbegin() noexcept {
+        return reverse_iterator(data + length);
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to the last element
+     */
+    const_reverse_iterator rbegin() const noexcept {
+        return const_reverse_iterator(data + length);
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to the last element
+     */
+    const_reverse_iterator crbegin() const noexcept {
+        return const_reverse_iterator(data + length);
+    }
+
+    /**
      * @brief Get an iterator to one past the last element
      */
     iterator end() noexcept {
@@ -345,6 +369,27 @@ public:
     }
 
     /**
+     * @brief Get a reverse iterator to one prior to the first element
+     */
+    reverse_iterator rend() noexcept {
+        return reverse_iterator(data);
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to one prior to the first element
+     */
+    const_reverse_iterator rend() const noexcept {
+        return const_reverse_iterator(data);
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to one prior to the first element
+     */
+    const_reverse_iterator crend() const noexcept {
+        return const_reverse_iterator(data);
+    }
+
+    /**
      * @brief Test if this vector is empty
      */
     bool empty() const noexcept {
@@ -359,8 +404,7 @@ public:
     }
 
     /**
-     * @brief Remove all elements from the vector. The
-     *        vector will be empty after this operation
+     * @brief Remove all elements from the vector. The vector will be empty after this operation
      */
     void clear() noexcept {
         std::destroy(data, data + length);
@@ -376,12 +420,16 @@ public:
      * @return an iterator pointing to the inserted value
      */
     iterator insert(const_iterator pos, const_reference value) requires std::copy_constructible<T> {
+        if (pos == end()) {
+            push_back(value);
+            return end() - 1;
+        }
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
         make_room(pos, 1);
         // insert value
         new(&data[idx]) T(value);
-        length++;
+        ++length;
         return data + idx;
     }
 
@@ -395,12 +443,16 @@ public:
      * @return an iterator pointing to the inserted value
      */
     iterator insert(const_iterator pos, value_type&& value) requires std::move_constructible<T> {
+        if (pos == end()) {
+            push_back(std::move(value));
+            return end() - 1;
+        }
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
         make_room(pos, 1);
         // insert value
         new(&data[idx]) T(std::move(value));
-        length++;
+        ++length;
         return data + idx;
     }
 
@@ -418,7 +470,7 @@ public:
     template<std::forward_iterator InputIt>
     iterator insert(const_iterator pos, InputIt first, InputIt last) requires std::copy_constructible<T> {
         if (first == last) {
-            return &data[pos - data];
+            return const_cast<T*>(pos);
         }
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
@@ -445,27 +497,27 @@ public:
     template<std::input_iterator InputIt>
     iterator insert(const_iterator pos, InputIt first, InputIt last) requires std::copy_constructible<T> {
         if (first == last) {
-            return &data[pos - data];
+            return const_cast<T*>(pos);
         }
         // get the idx before the iterator is invalidated
         std::size_t idx = pos - data;
         std::size_t suffix_length = length - idx;
 
         T* suffix_copy = safe_move_construct(data + idx, data + length, suffix_length);
-        std::unique_ptr<T, deleter<T> > cleaner(suffix_copy);
+        std::unique_ptr<T, safe_move_construct_deleter<T>> cleaner(suffix_copy, 
+            safe_move_construct_deleter<T>(suffix_length));
 
         // effectively erase the elements past the point of insertion
         std::destroy(data + idx, data + length);
         length = idx;
 
         // insert values via push_back
-        for (auto& it = first; it != last; it++) {
+        for (auto& it = first; it != last; ++it) {
             push_back(*it);
         }
 
         // insert back those elements that were after the point of insertion
         insert(data + length, suffix_copy, suffix_copy + suffix_length);
-        std::destroy(suffix_copy, suffix_copy + suffix_length);
         return data + idx;
     }
 
@@ -480,7 +532,7 @@ public:
         int idx = pos - data;
         safe_move(data + idx + 1, data + length, data + idx);
         std::destroy_at(data + length - 1);
-        length--;
+        --length;
         if (length < capacity / 4) {
             resize_buffer(capacity / 2);
         }
@@ -499,14 +551,15 @@ public:
      *      If the last element is removed, end() will be returned
      */
     iterator erase(const_iterator first, const_iterator last) {
-        int first_idx = first - data;
-        int last_idx = last - data;
+        std::size_t first_idx = first - data;
+        std::size_t last_idx = last - data;
         if (first == last) {
             return data + last_idx;
         }
+        std::size_t amount = last_idx - first_idx;
         safe_move(data + last_idx, data + length, data + first_idx);
-        std::destroy(data + first_idx, data + last_idx);
-        length -= (last_idx - first_idx);
+        std::destroy(data + length - amount, data + length);
+        length -= amount;
         if (length < capacity / 4) {
             resize_buffer(capacity / 2);
         }
@@ -525,7 +578,7 @@ public:
             resize_buffer(capacity * 2);
         }
         new(data + length) T(value);
-        length++;
+        ++length;
     }
 
     /**
@@ -541,7 +594,7 @@ public:
             resize_buffer(capacity * 2);
         }
         new(data + length) T(std::move(value));
-        length++;
+        ++length;
     }
 
     /**
@@ -566,7 +619,7 @@ public:
      * @brief Remove the last element in the vector and destroy it
      */
     void pop_back() {
-        length--;
+        --length;
         data[length].~T();
         if (length == capacity / 4) {
             resize_buffer(std::max(capacity / 2, DEFAULT_CAPACITY));

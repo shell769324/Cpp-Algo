@@ -50,7 +50,7 @@ namespace {
         }
 
         static void equivalence_test(const T& map, std::vector<typename T::value_type>& stub_pairs) {
-            for (unsigned i = 0; i < stub_pairs.size(); i++) {
+            for (unsigned i = 0; i < stub_pairs.size(); ++i) {
                 const constructor_stub& key = stub_pairs[i].first;
                 const constructor_stub& value = stub_pairs[i].second;
                 EXPECT_TRUE(map.contains(key));
@@ -75,7 +75,7 @@ namespace {
                 EXPECT_EQ(pair.second, stub_pairs[i].second);
                 EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(pair)>>,
                     std::is_const_v<Map>);
-                i++;
+                ++i;
             }
             check_constructor_counts();
             EXPECT_EQ(i, MEDIUM_LIMIT);
@@ -90,7 +90,7 @@ namespace {
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator(true));
             stub_pairs = get_random_stub_pair_vector(stubs);
             mark_constructor_counts();
-            for (auto it = map.rbegin(); it != map.rend(); it++, i++) {
+            for (auto it = map.rbegin(); it != map.rend(); ++it, ++i) {
                 auto& pair = *it;
                 EXPECT_EQ(pair.first, stub_pairs[i].first);
                 EXPECT_EQ(pair.second, stub_pairs[i].second);
@@ -112,13 +112,13 @@ namespace {
                 check_constructor_counts(0, 2, 0);
                 EXPECT_EQ(map.size(), i + 1);
                 if (i % skip == 0) {
-                    for (int j = 0; j <= i; j++) {
+                    for (int j = 0; j <= i; ++j) {
                         EXPECT_NE(map.find(stub_pairs[j].first), map.cend());
                         EXPECT_EQ(map[stub_pairs[j].first], stub_pairs[j].second);
                     }
                     EXPECT_TRUE(map.is_valid());
                 }
-                i++;
+                ++i;
             }
         }
 
@@ -132,7 +132,7 @@ namespace {
                 mark_constructor_counts();
                 map.erase(pair.first);
                 check_constructor_counts();
-                curr_size--;
+                --curr_size;
                 EXPECT_EQ(map.find(pair.first), map.cend());
                 EXPECT_EQ(map.size(), curr_size);
                 if (curr_size % skip == 0) {
@@ -153,7 +153,7 @@ namespace {
                 EXPECT_NE(map.find(pair.first), map.end());
                 mark_constructor_counts();
                 it = map.erase(it);
-                curr_size--;
+                --curr_size;
                 check_constructor_counts();
                 EXPECT_EQ(map.find(pair.first), map.cend());
                 EXPECT_EQ(map.size(), curr_size);
@@ -481,7 +481,7 @@ namespace {
         std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
         stub_pairs = get_random_stub_pair_vector(stubs);
         mark_constructor_counts();
-        for (auto it = map.cbegin(); it != map.cend(); it++, i++) {
+        for (auto it = map.cbegin(); it != map.cend(); ++it, ++i) {
             auto& pair = *it;
             EXPECT_EQ(pair.first, stub_pairs[i].first);
             EXPECT_EQ(pair.second, stub_pairs[i].second);
@@ -506,7 +506,7 @@ namespace {
         std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator(true));
         stub_pairs = get_random_stub_pair_vector(stubs);
         mark_constructor_counts();
-        for (auto it = map.crbegin(); it != map.crend(); it++, i++) {
+        for (auto it = map.crbegin(); it != map.crend(); ++it, ++i) {
             auto& pair = *it;
             EXPECT_EQ(pair.first, stub_pairs[i].first);
             EXPECT_EQ(pair.second, stub_pairs[i].second);
@@ -627,7 +627,7 @@ namespace {
     TYPED_TEST_P(map_test, insert_range_test) {
         std::vector<typename TypeParam::value_type> stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
         TypeParam map(stub_pairs.begin(), stub_pairs.end());
-        for (unsigned i = 0; i < stub_pairs.size(); i++) {
+        for (unsigned i = 0; i < stub_pairs.size(); ++i) {
             constructor_stub stub = stub_pairs[i].first;
             auto pair = *map.find(stub);
             EXPECT_EQ(pair.second, stub_pairs[i].second);
@@ -795,12 +795,12 @@ namespace {
         auto it2 = map.find(stubs[trisect2]);
         EXPECT_EQ(map.erase(it1, it2), it2);
         EXPECT_EQ(map.size(), stubs.size() - (trisect2 - trisect1));
-        for (std::size_t i = trisect1; i < trisect2; i++) {
+        for (std::size_t i = trisect1; i < trisect2; ++i) {
             EXPECT_EQ(map.find(stubs[i]), map.end());
         }
         map.erase(it2, map.end());
         EXPECT_EQ(map.size(), trisect1);
-        for (std::size_t i = trisect2; i < stubs.size(); i++) {
+        for (std::size_t i = trisect2; i < stubs.size(); ++i) {
             EXPECT_EQ(map.find(stubs[i]), map.end());
         }
         map.erase(map.begin(), map.end());
@@ -925,7 +925,7 @@ namespace {
         TypeParam map1;
         TypeParam map2;
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stub_pairs.size() / 2; i++) {
+        for (unsigned i = 0; i < stub_pairs.size() / 2; ++i) {
             map1.insert(stub_pairs[i]);
             unsigned reverse_index = stub_pairs.size() - 1 - i;
             map2.insert(stub_pairs[reverse_index]);
@@ -940,7 +940,7 @@ namespace {
         TypeParam map1;
         TypeParam map2;
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stub_pairs.size() / 2; i++) {
+        for (unsigned i = 0; i < stub_pairs.size() / 2; ++i) {
             map1.insert(stub_pairs[i]);
             unsigned reverse_index = stub_pairs.size() - 1 - i;
             map2.insert(stub_pairs[reverse_index]);
@@ -957,7 +957,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stub_pairs.size() / 3; i++) {
+        for (unsigned i = 0; i < stub_pairs.size() / 3; ++i) {
             map1.insert(stub_pairs[i]);
             unsigned reverse_index = stub_pairs.size() - 1 - i;
             map2.insert(stub_pairs[reverse_index]);
@@ -974,7 +974,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stub_pairs.size() / 3; i++) {
+        for (unsigned i = 0; i < stub_pairs.size() / 3; ++i) {
             map1.insert(stub_pairs[i]);
             unsigned reverse_index = stub_pairs.size() - 1 - i;
             map2.insert(stub_pairs[reverse_index]);
@@ -1020,7 +1020,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stub_pairs.size() / 3; i++) {
+        for (unsigned i = 0; i < stub_pairs.size() / 3; ++i) {
             map1.insert(stub_pairs[i]);
             map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -1036,7 +1036,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             map1.insert(stub_pairs[i]);
             map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -1052,7 +1052,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             map1.insert(stub_pairs[i]);
             map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -1097,7 +1097,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (unsigned i = 0; i < stub_pairs.size() / 3; i++) {
+        for (unsigned i = 0; i < stub_pairs.size() / 3; ++i) {
             map1.insert(stub_pairs[i]);
             map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -1113,7 +1113,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             map1.insert(stub_pairs[i]);
             map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -1129,7 +1129,7 @@ namespace {
         TypeParam map1(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         TypeParam map2(stub_pairs.begin() + share_start, stub_pairs.begin() + share_end);
         unsigned skip = MEDIUM_LIMIT / REPEAT;
-        for (int i = 0; i < MEDIUM_LIMIT / 3; i++) {
+        for (int i = 0; i < MEDIUM_LIMIT / 3; ++i) {
             map1.insert(stub_pairs[i]);
             map2.insert(stub_pairs[stub_pairs.size() - 1 - i]);
             if (i % skip == 0) {
@@ -1144,7 +1144,7 @@ namespace {
         int SRTESS_LIMIT = 20000;
 
         std::map<constructor_stub, constructor_stub, constructor_stub_comparator> stub_map;
-        for (int i = 0; i < SRTESS_LIMIT; i++) {
+        for (int i = 0; i < SRTESS_LIMIT; ++i) {
             int num = random_number(0, 4000);
             switch (do_action_lottery()) {
                 case LOOK_UP: {
