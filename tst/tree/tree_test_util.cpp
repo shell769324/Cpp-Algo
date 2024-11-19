@@ -1,5 +1,7 @@
 #include <memory>
 #include "tst/tree/tree_test_util.h"
+#include <iostream>
+#include "tst/utility/tracking_allocator.h"
 
 namespace algo {
     void is_parent_left_child_test(const binary_tree_node<constructor_stub>* node, const binary_tree_node<constructor_stub>* left_child) {
@@ -12,12 +14,14 @@ namespace algo {
         EXPECT_EQ(right_child -> parent, node);
     }
 
-    std::unique_ptr<binary_tree_node<constructor_stub> > create_perfectly_balance_tree(int size, int offset) {
+    binary_tree_node<constructor_stub>::unique_ptr_type create_perfectly_balance_tree(int size, int offset) {
+        static tracking_allocator<binary_tree_node<constructor_stub>> allocator;
         if (size == 0) {
             return nullptr;
         }
         int root_val = size / 2;
-        auto root = std::make_unique<binary_tree_node<constructor_stub>>(constructor_stub{root_val + offset});
+        auto root = binary_tree_node<constructor_stub>::unique_ptr_type(
+            binary_tree_node<constructor_stub>::construct(allocator, constructor_stub{root_val + offset}));
         auto left_child = create_perfectly_balance_tree(root_val, offset);
         if (left_child) {
             root -> link_left_child(std::move(left_child));

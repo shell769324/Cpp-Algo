@@ -3,10 +3,9 @@
 #include <new>
 #include <memory>
 #include <concepts>
-#include <iostream>
-#include <algorithm>
 #include <iterator>
 #include "common.h"
+#include "allocator_aware_algorithms.h"
 
 namespace algo {
     
@@ -15,26 +14,33 @@ namespace algo {
  * 
  * @tparam T the type of elements in the array
  */
-template<typename T>
+template<typename T, typename Allocator = std::allocator<T> > 
+    requires std::same_as<T, typename std::allocator_traits<Allocator>::value_type>
 class vector {
 public:
     using value_type = T;
+    using allocator_type = Allocator;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
     using reference = T&;
     using const_reference = const T&;
-    using pointer = T*;
+    using pointer = std::allocator_traits<Allocator>::pointer;
+    using const_pointer = std::allocator_traits<Allocator>::const_pointer;
     using iterator = T*;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_iterator = const T*;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
 private:
+    using alloc_traits = std::allocator_traits<allocator_type>;
     // The length of the portion of the data array that contain elements
-    std::size_t length;
+    size_type length;
     // The length of data array
-    std::size_t capacity;
-    value_type* data;
+    size_type capacity;
+    pointer data;
+    allocator_type allocator;
 
-    constexpr static const std::size_t DEFAULT_CAPACITY = 4;
+    constexpr static size_type DEFAULT_CAPACITY = 4;
     
     /**
      * @brief Set length, capacity and allocate a raw slab of memory
@@ -43,36 +49,32 @@ private:
      * @param len the length
      * @param cap the capacity
      */
-    void constructor_helper(std::size_t len, std::size_t cap) {
+    void constructor_helper(size_type len, size_type cap) {
         length = len;
         capacity = cap;
-        data = static_cast<T*>(::operator new(sizeof(T) * cap));
+        data = alloc_traits::allocate(allocator, cap);
     }
 
     /**
      * @brief resize the data buffer
      * 
-     * If the new capacity is smaller than the current length,
-     * elements beyond capacity will be missing from the new data buffer
-     * 
      * @param count the new capacity
      */
-    void resize_buffer(std::size_t count) {
+    void resize_buffer(size_type count) {
         if (capacity == count) {
             return;
         }
-        std::size_t new_length = std::min(length, count);
-        std::size_t old_length = length;
         T* old_data = data;
         // Create a clone of the old buffer with move if it is safe
         // Elements beyond capacity won't make into the new data buffer
-        data = safe_move_construct(data, data + new_length, count);
+        data = try_move_construct(data, data + length, count, allocator);
+        if (capacity > 0) {
+            // old buffer must be deallocated no matter what
+            std::unique_ptr<T, deleter<T, allocator_type> > 
+                cleaner(old_data, deleter<T, allocator_type>(capacity, allocator));
+            destroy(old_data, old_data + length, allocator);
+        }
         capacity = count;
-        length = new_length;
-        // old buffer must be deallocated no matter what
-        std::unique_ptr<T, deleter<T> > cleaner(old_data);
-        // Call destructor on all elements (some of which have been moved)
-        std::destroy(old_data, old_data + old_length);
     }
 
     /**
@@ -83,31 +85,31 @@ private:
      * @param pos the position after which space will be created
      * @param distance how far trailing elements need to push back
      */
-    void make_room(const_iterator pos, std::size_t distance) {
+    void make_room(const_iterator pos, size_type distance) {
         if (distance == 0) {
             return;
         }
-        size_t idx = pos - data;
+        difference_type idx = pos - data;
         // Not optimal but less error prone
         // Could have partially resize the buffer and fill in the data
         // to avoid one copy. It is permissible because resize_buffer
         // is amortized constant
-        std::size_t new_length = length + distance;
+        size_type new_length = length + distance;
         if (new_length > capacity) {
             resize_buffer(new_length * 2);
         }
-        std::size_t dest_left_bound = idx + distance;
+        difference_type dest_left_bound = idx + distance;
         for (T* to = data + new_length - 1; to >= data + dest_left_bound; to--) {
             T* from = to - distance;
             if (to - data < (long int) length) {
-                safe_move(to, *from);
+                try_move(to, *from);
             } else {
-                safe_uninitialized_move(to, *from);
+                try_uninitialized_move(to, *from, allocator);
             }
         }
         // Make sure the yielded space is uninitialized
-        std::size_t clean_right_bound = std::min<std::size_t>(dest_left_bound, length);
-        std::destroy(data + idx, data + clean_right_bound);
+        difference_type clean_right_bound = std::min<difference_type>(dest_left_bound, length);
+        destroy(data + idx, data + clean_right_bound, allocator);
     }
 
 
@@ -117,48 +119,80 @@ public:
      * 
      * Construct a new empty vector
      */
-    vector() {
+    vector() : vector(allocator_type()) { }
+
+    /**
+     * @brief Construct a new vector object with an allocator
+     * 
+     * @param allocator the allocator to allocate and deallocate raw memory 
+     */
+    explicit vector(const allocator_type& allocator) : allocator(allocator) {
         constructor_helper(0, DEFAULT_CAPACITY);
     }
 
     /**
-     * @brief Construct a vector with default constructed elements
+     * @brief Construct a vector with default constructed elements and an optional allocator
      * 
      * Construct a new vector of given length. All elements are
      * default constructed
      * 
-     * @param n the length of the vector
+     * @param n the number of default constructed elements
+     * @param allocator an optional allocator to allocate and deallocate raw memory 
      */
-    vector(std::size_t n) requires std::default_initializable<T> {
+    explicit vector(size_type n, const allocator_type& allocator = allocator_type()) 
+            requires std::default_initializable<T> : allocator(allocator) {
         constructor_helper(n, n);
         try {
             // all filled elements will be destroyed when one constructor throws an exception
-            std::uninitialized_default_construct_n(data, n);
+            uninitialized_default_construct(data, data + n, this -> allocator);
         } catch (...) {
             // The raw memory must be deallocated
-            ::operator delete(data);
+            alloc_traits::deallocate(this -> allocator, data, capacity);
             throw;
         }
     }
 
     /**
-     * @brief Construct a vector with copied of a given element
+     * @brief Construct a vector with copies a given element and an optional allocator
      * 
      * Construct a new vector of a given length. All elements are
      * copys of the specified element
      * 
      * @param n the length of the vector
      * @param value the element to copy
+     * @param allocator an optional allocator to allocate and deallocate raw memory 
      */
-    vector(std::size_t n, const_reference value) requires std::copy_constructible<T> {
+    vector(size_type n, const_reference value, const allocator_type& allocator = allocator_type())
+            requires std::copy_constructible<T> : allocator(allocator) {
         constructor_helper(n, n);
         try {
             // all filled elements will be destroyed when one constructor throws an exception
-            std::uninitialized_fill_n(data, n, value);
+            uninitialized_fill(data, data + n, value, this -> allocator);
         } catch (...) {
             // The raw memory must be deallocated
-            ::operator delete(data);
+            alloc_traits::deallocate(this -> allocator, data, capacity);
             throw;
+        }
+    }
+
+    /**
+     * @brief Construct a new vector from range with an optional allocator
+     * 
+     * @tparam InputIt the type of the iterators that specify the range
+     * @param first the beginning of the range
+     * @param last the end of the range
+     * @param allocator an optional allocator to allocate and deallocate raw memory 
+     */
+    template<std::input_iterator InputIt>
+    vector(InputIt first, InputIt last, const allocator_type& allocator = allocator_type()) requires std::copy_constructible<T> 
+            : length(0), 
+              capacity(0), 
+              data(nullptr), 
+              allocator(allocator) {
+        if (first == last) {
+            constructor_helper(0, DEFAULT_CAPACITY);
+        } else {
+            insert(data, first, last);
         }
     }
 
@@ -169,13 +203,32 @@ public:
      * 
      * @param other the vector to copy from
      */
-    vector(const vector& other) requires std::copy_constructible<T> {
+    vector(const vector& other) requires std::copy_constructible<T> : allocator(other.allocator) {
         constructor_helper(other.length, other.capacity);
         try {
-            std::uninitialized_copy(other.cbegin(), other.cend(), data);
+            uninitialized_copy(other.cbegin(), other.cend(), data, allocator);
         } catch (...) {
             // The raw memory must be deallocated
-            ::operator delete(data);
+            alloc_traits::deallocate(this -> allocator, data, capacity);
+            throw;
+        }
+    }
+
+    /**
+     * @brief Construct a copy of another vector with an allocator
+     * 
+     * Construct a copy of a given vector without modifying it
+     * 
+     * @param other the vector to copy from
+     * @param allocator the allocator to allocate and deallocate raw memory 
+     */
+    constexpr vector(const vector& other, const std::type_identity_t<Allocator>& allocator) : allocator(allocator) {
+        constructor_helper(other.length, other.capacity);
+        try {
+            uninitialized_copy(other.cbegin(), other.cend(), data, this -> allocator);
+        } catch (...) {
+            // The raw memory must be deallocated
+            alloc_traits::deallocate(this -> allocator, data, capacity);
             throw;
         }
     }
@@ -186,25 +239,32 @@ public:
      * Construct a copy of a given vector by using its resource. The given
      * vector will be left in a valid yet unspecified state
      * 
-     * @param other 
+     * @param other the vector to move from
      */
-    vector(vector&& other) noexcept :
-        length{0},
-        capacity{0},
-        data{nullptr} {
+    vector(vector&& other) noexcept 
+        : length{0},
+          capacity{0},
+          data{nullptr} {
         swap(other);
     }
 
     /**
-     * @brief Construct a new vector object from range
+     * @brief Construct a copy of another vector with an allocator by move
      * 
-     * @tparam InputIt the type of the iterators that specify the range
-     * @param first the beginning of the range
-     * @param last the end of the range
+     * Construct a copy of a given vector by using its resource. The given
+     * vector will be left in a valid yet unspecified state
+     * 
+     * @param other the vector to move from
+     * @param allocator the allocator to allocate and deallocate raw memory 
      */
-    template<std::input_iterator InputIt>
-    vector(InputIt first, InputIt last) requires std::copy_constructible<T> : vector() {
-        insert(data, first, last);
+    vector(vector&& other, const std::type_identity_t<Allocator>& allocator) noexcept 
+        : length{0},
+          capacity{0},
+          data{nullptr},
+          allocator(allocator) {
+        std::swap(length, other.length);
+        std::swap(capacity, other.capacity);
+        std::swap(data, other.data);
     }
 
     /**
@@ -214,7 +274,8 @@ public:
      * 
      * @param list the initializer list
      */
-    vector(std::initializer_list<value_type> list) : vector(list.begin(), list.end()) {}
+    vector(std::initializer_list<value_type> list, const allocator_type& allocator = allocator_type()) 
+        : vector(list.begin(), list.end(), allocator) {}
 
 
     /**
@@ -223,10 +284,9 @@ public:
      * Destroy all elements in the vector and free memory allocated to
      * the vector
      */
-    ~vector() {
-        // delete even if destructor throws an exception
-        std::unique_ptr<T, deleter<T> > cleaner(data);
-        std::destroy(data, data + length);
+    ~vector() noexcept {
+        destroy(data, data + length, allocator);
+        alloc_traits::deallocate(allocator, data, capacity);
     }
 
     /**
@@ -246,8 +306,10 @@ public:
 
         if constexpr (std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_destructible_v<T>) {
             if (capacity >= other.length) {
-                std::destroy(data, data + length);
-                std::uninitialized_copy(other.data, other.data + other.length, data);
+                destroy(data, data + length, allocator);
+                uninitialized_copy(other.data, other.data + other.length, data, allocator);
+                length = other.length;
+                allocator = other.allocator;
                 return *this;
             }
         }
@@ -271,6 +333,13 @@ public:
     vector& operator=(vector&& other) noexcept {
         swap(other);
         return *this;
+    }
+
+    /**
+     * @brief Get a copy of the associated allocator
+     */
+    allocator_type get_allocator() const noexcept {
+        return allocator;
     }
 
     /**
@@ -407,7 +476,7 @@ public:
      * @brief Remove all elements from the vector. The vector will be empty after this operation
      */
     void clear() noexcept {
-        std::destroy(data, data + length);
+        destroy(data, data + length, allocator);
         length = 0;
     }
 
@@ -425,10 +494,10 @@ public:
             return end() - 1;
         }
         // get the idx before the iterator is invalidated
-        std::size_t idx = pos - data;
+        difference_type idx = pos - data;
         make_room(pos, 1);
         // insert value
-        new(&data[idx]) T(value);
+        alloc_traits::construct(allocator, data + idx, value);
         ++length;
         return data + idx;
     }
@@ -448,10 +517,10 @@ public:
             return end() - 1;
         }
         // get the idx before the iterator is invalidated
-        std::size_t idx = pos - data;
+        difference_type idx = pos - data;
         make_room(pos, 1);
         // insert value
-        new(&data[idx]) T(std::move(value));
+        alloc_traits::construct(allocator, data + idx, std::move(value));
         ++length;
         return data + idx;
     }
@@ -473,14 +542,14 @@ public:
             return const_cast<T*>(pos);
         }
         // get the idx before the iterator is invalidated
-        std::size_t idx = pos - data;
-        std::size_t distance = std::distance(first, last);
+        difference_type idx = pos - data;
+        std::ptrdiff_t distance = std::distance(first, last);
         make_room(pos, distance);
         // insert values
         T* to = data + idx;
-        std::uninitialized_copy(first, last, to);
+        uninitialized_copy(first, last, to, allocator);
         length += distance;
-        return data + idx;
+        return to;
     }
 
     /**
@@ -499,26 +568,12 @@ public:
         if (first == last) {
             return const_cast<T*>(pos);
         }
-        // get the idx before the iterator is invalidated
-        std::size_t idx = pos - data;
-        std::size_t suffix_length = length - idx;
-
-        T* suffix_copy = safe_move_construct(data + idx, data + length, suffix_length);
-        std::unique_ptr<T, safe_move_construct_deleter<T>> cleaner(suffix_copy, 
-            safe_move_construct_deleter<T>(suffix_length));
-
-        // effectively erase the elements past the point of insertion
-        std::destroy(data + idx, data + length);
-        length = idx;
-
+        vector storage(allocator);
         // insert values via push_back
         for (auto& it = first; it != last; ++it) {
-            push_back(*it);
+            storage.push_back(*it);
         }
-
-        // insert back those elements that were after the point of insertion
-        insert(data + length, suffix_copy, suffix_copy + suffix_length);
-        return data + idx;
+        return insert(pos, storage.begin(), storage.end());
     }
 
     /**
@@ -530,12 +585,9 @@ public:
      */
     iterator erase(const_iterator pos) {
         int idx = pos - data;
-        safe_move(data + idx + 1, data + length, data + idx);
-        std::destroy_at(data + length - 1);
+        try_move(data + idx + 1, data + length, data + idx);
+        alloc_traits::destroy(allocator, data + length - 1);
         --length;
-        if (length < capacity / 4) {
-            resize_buffer(capacity / 2);
-        }
         return data + idx;
     }
 
@@ -551,18 +603,15 @@ public:
      *      If the last element is removed, end() will be returned
      */
     iterator erase(const_iterator first, const_iterator last) {
-        std::size_t first_idx = first - data;
-        std::size_t last_idx = last - data;
+        difference_type first_idx = first - data;
+        difference_type last_idx = last - data;
         if (first == last) {
             return data + last_idx;
         }
-        std::size_t amount = last_idx - first_idx;
-        safe_move(data + last_idx, data + length, data + first_idx);
-        std::destroy(data + length - amount, data + length);
+        difference_type amount = last_idx - first_idx;
+        try_move(data + last_idx, data + length, data + first_idx);
+        destroy(data + length - amount, data + length, allocator);
         length -= amount;
-        if (length < capacity / 4) {
-            resize_buffer(capacity / 2);
-        }
         return data + first_idx;
     }
 
@@ -577,7 +626,7 @@ public:
         if (length == capacity) {
             resize_buffer(capacity * 2);
         }
-        new(data + length) T(value);
+        alloc_traits::construct(allocator, data + length, value);
         ++length;
     }
 
@@ -593,7 +642,7 @@ public:
         if (length == capacity) {
             resize_buffer(capacity * 2);
         }
-        new(data + length) T(std::move(value));
+        alloc_traits::construct(allocator, data + length, std::move(value));
         ++length;
     }
 
@@ -611,7 +660,7 @@ public:
         if (length == capacity) {
             resize_buffer(capacity * 2);
         }
-        new(data + length) T(std::forward<Args>(args)...);
+        alloc_traits::construct(allocator, data + length, std::forward<Args>(args)...);
         return data[length++];
     }
 
@@ -620,10 +669,7 @@ public:
      */
     void pop_back() {
         --length;
-        data[length].~T();
-        if (length == capacity / 4) {
-            resize_buffer(std::max(capacity / 2, DEFAULT_CAPACITY));
-        }
+        alloc_traits::destroy(allocator, data + length);
     }
 
     /**
@@ -637,7 +683,7 @@ public:
      * 
      * @param count the new size of the container
      */
-    void resize(std::size_t count) {
+    void resize(size_type count) {
         if (count == length) {
             return;
         }
@@ -645,9 +691,9 @@ public:
             resize_buffer(count * 2);
         }
         if (count > length) {
-            std::uninitialized_default_construct(data + length, data + count);
+            uninitialized_default_construct(data + length, data + count, allocator);
         } else {
-            std::destroy(data + count, data + length);
+            destroy(data + count, data + length, allocator);
         }
         length = count;
     }
@@ -661,6 +707,38 @@ public:
         std::swap(length, other.length);
         std::swap(capacity, other.capacity);
         std::swap(data, other.data);
+        std::swap(allocator, other.allocator);
+    }
+
+    /**
+     * @brief Check equality of two vectors
+     * 
+     * @param vec1 the first vector
+     * @param vec2 the second vector
+     * @return true if their contents are equal, false otherwise
+     */
+    friend bool operator==(const vector& vec1, const vector& vec2) noexcept requires equality_comparable<value_type> {
+        return container_equals(vec1, vec2);
+    }
+
+    /**
+     * @brief Compare two vectors
+     * 
+     * @param vec1 the first vector
+     * @param vec2 the second vector
+     * @return a strong ordering comparison result
+     */
+    friend std::strong_ordering operator<=>(const vector& vec1, const vector& vec2) noexcept requires less_comparable<value_type> {
+        return container_three_way_comparison(vec1, vec2);
+    }
+
+    // For testing purpose
+    std::size_t __get_default_capacity() const noexcept {
+        return DEFAULT_CAPACITY;
+    }
+
+    std::size_t __get_capacity() const noexcept {
+        return capacity;
     }
 };
 }

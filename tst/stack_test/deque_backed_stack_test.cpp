@@ -1,14 +1,14 @@
 #include "gtest/gtest.h"
-#include "tree/red_black_tree_set.h"
+#include "src/deque/deque.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
+#include "tst/stack_test/stack_test.h"
 #include <iostream>
-#include "tst/set_test.h"
 
 namespace {
     
     using namespace algo;
-    class red_black_tree_set_test : public ::testing::Test {
+    class deque_backed_stack_test : public ::testing::Test {
     protected:
         static void SetUpTestCase() {
             std::srand(7759);
@@ -23,7 +23,5 @@ namespace {
         }
     };
 
-    using stub_red_black_set_type = red_black_tree_set<constructor_stub, constructor_stub_comparator, tracking_allocator<constructor_stub> >;
-
-    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, set_test, stub_red_black_set_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(deque_backed_stack, stack_test, deque<int>);
 }

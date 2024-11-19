@@ -4,66 +4,151 @@
 #include <stdexcept>
 #include <concepts>
 #include <algorithm>
-#include <climits>
 #include <iterator>
 #include <memory>
 #include "src/common.h"
 #include "src/vector.h"
+#include "src/allocator_aware_algorithms.h"
 
 
 namespace algo {
 
-template <typename T, typename Operator>
-requires std::regular_invocable<Operator, T, T> && std::same_as<T, std::decay_t<std::invoke_result_t<Operator, T, T> > >
+class destroy_exception : public exception {
+    const exception& cause;
+public:
+    destroy_exception(const exception other) noexcept : cause(other) { }
+}
+
+template <typename T, typename Operator, typename Allocator = std::allocator<T> >
+requires std::regular_invocable<Operator, T, T> && std::same_as<T, std::decay_t<std::invoke_result_t<Operator, T, T> > > && std::same_as<T, typename Allocator::value_type>
 class segment_tree {
     using value_type = T;
+    using allocator_type = Allocator;
+    using size_type = std::size_t;
     using reference = T&;
     using const_reference = const T&;
     using pointer = T*;
+    using const_pointer = const T*;
     
 private:
+    using alloc_traits = std::allocator_traits<Allocator>;
+
     std::size_t length;
     pointer data;
     Operator op;
+    Allocator allocator;
 
-    T build(std::size_t left, std::size_t right, std::size_t curr, const_reference value) {
+    template<typename... Args>
+    requires !singleton_pack_decayable_to<pointer, Args...>
+    T build(std::size_t left, std::size_t right, std::size_t curr, Args&& args...) {
         if (right - left == 1) {
-            new(data + curr) T(value);
-            return value;
+            alloc_traits.construct(allocator, data + curr, std::forward<Args>(args)...);
+            return data[curr];
         }
         std::size_t mid = (right - left) / 2 + left;
-        T left_val = build(left, mid, curr + 1, value);
-        T right_val = build(mid, right, curr + 2 * (mid - left), value);
-        new(data + curr) T(op(std::move(left_val), std::move(right_val)));
+        std::size_t destroy_end = left;
+        try {
+            T left_val = build(left, mid, curr + 1, value);
+            destroy_end = mid;
+            T right_val = build(mid, right, curr + 2 * (mid - left), value);
+            destroy_end = right;
+            alloc_traits.construct(allocator, data + curr, op(std::move(left_val), std::move(right_val)));
+        } catch (..) {
+            destroy(left, destroy_end, allocator);
+            throw;
+        }
         return data[curr];
     }
 
     T build(std::size_t left, std::size_t right, std::size_t curr, pointer original) {
         if (right - left == 1) {
-            new(data + curr) T(original[left]);
+            alloc_traits.construct(allocator, data + curr, original[left]);
             return data[curr];
         }
         std::size_t mid = (right - left) / 2 + left;
-        T left_val = build(left, mid, curr + 1, original);
-        T right_val = build(mid, right, curr + 2 * (mid - left), original);
-        new(data + curr) T(op(std::move(left_val), std::move(right_val)));
+        std::size_t destroy_end = left;
+        try {
+            T left_val = build(left, mid, curr + 1, original);
+            destroy_end = mid;
+            T right_val = build(mid, right, curr + 2 * (mid - left), original);
+            destroy_end = right;
+            alloc_traits.construct(allocator, data + curr, op(std::move(left_val), std::move(right_val)));
+        } catch (..) {
+            destroy(left, destroy_end, allocator);
+            throw;
+        }
         return data[curr];
+    }
+
+    template<typename... Args>
+    void repeat_initialize_helper(Args&& args...) {
+        data = alloc_traits::allocate(allocator, length * 2 - 1);
+        try {
+            build(0, length, 0, std::forward<Args>(args)...);
+        } catch (...) {
+            alloc_traits::deallocate(allocator, length * 2 - 1);
+            throw;
+        }
     }
     
 public:
-    segment_tree(std::size_t length, const Operator& op=Operator())
+    /**
+     * @brief Construct a new segment tree object with length, an optional operator and an optional Allocator
+     * 
+     * The elements in the tree will be default constructed
+     * 
+     * @param length the fixed length of the segment tree
+     * @param op the associated binary operator
+     * @param allocator the allocator to construct and destroy elements
+     */
+    segment_tree(std::size_t length, const Operator& op = Operator(), const Allocator& allocator=Allocator())
         requires std::default_initializable<T> 
-        : segment_tree(length, T(), op) {}
+        : length(length), op(op), allocator(allocator) {
+        repeat_initialize_helper();
+    }
 
-    segment_tree(std::size_t length, const_reference value, const Operator& op=Operator()) requires std::copy_constructible<T>
-        : length(length), op(op) {
+    /**
+     * @brief Construct a new segment tree object with length, a value to copy, an optional operator and an optional Allocator
+     * 
+     * The elements in the tree will be copies of the given value
+     * 
+     * @param length the fixed length of the segment tree
+     * @param value the value to copy
+     * @param op the associated binary operator
+     * @param allocator the allocator to construct and destroy elements
+     */
+    segment_tree(std::size_t length, const_reference value, const Operator& op = Operator(), const Allocator& allocator=Allocator()) 
+        requires std::copy_constructible<T>
+        : length(length), op(op), allocator(allocator) {
+        repeat_initialize_helper(value);
+    }
+
+
+    /**
+     * @brief Construct a new segment tree from a range
+     * 
+     * The segment tree will have the same content as the range defined
+     * by the two iterators
+     * 
+     * @tparam ForwardIt the type of the forward iterator
+     * @param first the inclusive begin of the range
+     * @param last the exclusive end of the range
+     * @param op the associative binary operator
+     */
+    template<std::forward_iterator ForwardIt>
+    segment_tree(ForwardIt first, ForwardIt last, const Operator& op = Operator(), const Allocator& allocator = Allocator()) requires std::copy_constructible<T>
+        : length(std::distance(first, last)), op(op), allocator(allocator) {
         data = static_cast<T*>(::operator new(sizeof(T) * (length * 2 - 1)));
+        pointer temp = static_cast<T*>(::operator new(sizeof(T) * length));
         try {
-            build(0, length, 0, value);
+            std::uninitialized_copy(first, last, temp);
+            build(0, length, 0, temp);
         } catch (...) {
             ::operator delete(data);
+            ::operator delete(temp);
             throw;
         }
+        ::operator delete(temp);
     }
 
     /**
@@ -95,32 +180,6 @@ public:
         data(nullptr),
         op(other.op) {
         swap(other);
-    }
-
-    /**
-     * @brief Construct a new segment tree from a range
-     * 
-     * The segment tree will have the same content as the range defined
-     * by the two iterators
-     * 
-     * @tparam ForwardIt the type of the forward iterator
-     * @param first the inclusive begin of the range
-     * @param last the exclusive end of the range
-     * @param op the associative binary operator
-     */
-    template<std::forward_iterator ForwardIt>
-    segment_tree(ForwardIt first, ForwardIt last, const Operator& op=Operator()) requires std::copy_constructible<T>
-        : length(std::distance(first, last)), op(op) {
-        data = static_cast<T*>(::operator new(sizeof(T) * (length * 2 - 1)));
-        pointer temp = static_cast<T*>(::operator new(sizeof(T) * length));
-        std::unique_ptr<T, deleter<T> > cleaner(temp);
-        try {
-            std::uninitialized_copy(first, last, temp);
-            build(0, length, 0, temp);
-        } catch (...) {
-            ::operator delete(data);
-            throw;
-        }
     }
 
     /**
@@ -317,10 +376,31 @@ public:
         return update_helper(pos, 0, 0, length, std::move(val));
     }
 
-    void swap(segment_tree& other) noexcept {
+    void swap(segment_tree& other) noexcept(std::is_nothrow_swappable_v<Operator>) {
         std::swap(length, other.length);
         std::swap(data, other.data);
         std::swap(op, other.op);
+        std::swap(allocator, other.allocator);
+    }
+
+    /**
+     * @brief Check equality of two segment trees
+     * 
+     * @param tree1 the first segment tree
+     * @param tree2 the second segment tree
+     * @return true if their contents are equal, false otherwise
+     */
+    friend bool operator==(const segment_tree& tree1, const segment_tree& tree2) requires equality_comparable<value_type> {
+        if (tree1.size() != tree2.size()) {
+            return false;
+        }
+        for (const_pointer it1 = tree1.data + 1, it1 = tree2.data + 1; 
+             it1 != tree1.data + length && it2 != tree2.data + length; ++it1, ++it2) {
+            if (!(*it1 == *it2)) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 }

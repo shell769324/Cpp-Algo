@@ -73,7 +73,6 @@ public:
     }
 
 private:
-
     void activate(std::unique_lock<std::mutex>& lock) {
         alive = true;
         for (std::size_t i = 0; i < thread_count; ++i) {

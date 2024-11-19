@@ -2,9 +2,9 @@
 
 #include <concepts>
 #include <utility>
-#include <bitset>
 #include <iterator>
 #include "common.h"
+#include "allocator_aware_algorithms.h"
 
 namespace algo {
 /**
@@ -20,15 +20,23 @@ namespace algo {
  *         f'(<A, true>, f(A, B)) = B
  *         f'(<B, false>, f(A, B)) = A
  *         where A, B are any value of type T
+ * @tparam Allocator the allocator to construct and destroy elements.
  */
-template <typename T, typename Operator, typename InverseOperator>
-requires std::regular_invocable<Operator, T, T> && std::regular_invocable<InverseOperator, std::pair<T, bool>, T>
+template <typename T, typename Operator, typename InverseOperator, typename Allocator = std::allocator<T> >
+requires std::regular_invocable<Operator, T, T> && std::regular_invocable<InverseOperator, std::pair<T, bool>, T> && std::same_as<T, typename Allocator::value_type>
 class binary_indexed_tree {
+public:
     using value_type = T;
+    using allocator_type = Allocator;
+    using size_type = std::size_t;
     using reference = T&;
     using const_reference = const T&;
+    using pointer = T*;
+    using const_pointer = const T*;
 
 private:
+    using alloc_traits = std::allocator_traits<Allocator>;
+
     // length of the data array. It is one bigger than the length of the input
     std::size_t length;
     /*
@@ -47,6 +55,7 @@ private:
     Operator op;
     InverseOperator inverse_op;
     T identity;
+    Allocator allocator;
 
     /**
      * @brief Given an array that has raw data, construct a binary indexed tree
@@ -68,6 +77,19 @@ private:
         return prev;
     }
 
+    void fill_initialize_helper(const_reference value) {
+        data = alloc_traits::allocate(allocator, length);
+        try {
+            // all filled elements will be destroyed when one constructor call throws an exception
+            uninitialized_fill(data + 1, data + length, value, allocator);
+        } catch (...) {
+            // The raw memory must be deallocated
+            alloc_traits::deallocate(allocator, data, length);
+            throw;
+        }
+        initialize(data, length);
+    }
+
 public:
     /**
      * @brief Construct a new binary indexed tree with the identity values
@@ -76,10 +98,15 @@ public:
      * @param op the associative, invertible binary operator
      * @param inverseOp the inverse of the binary operator
      * @param identity identity value with regards to this binary operator
+     * @param allocator the allocator to construct and destroy elements
      */
-    binary_indexed_tree(std::size_t size, const Operator& op, const InverseOperator& inverseOp, T identity=T())
+    binary_indexed_tree(std::size_t size, const Operator& op = Operator(), 
+                        const InverseOperator& inverseOp = InverseOperator(), T identity=T(), 
+                        const Allocator& allocator = Allocator())
         requires std::default_initializable<T> 
-        : binary_indexed_tree(size, identity, op, inverseOp, identity) {}
+        : length(size + 1), op(op), inverse_op(inverseOp), identity(identity), allocator(allocator) {
+        fill_initialize_helper(identity);
+    }
 
     /**
      * @brief Construct a new binary indexed tree that repeats the same specified value
@@ -89,21 +116,43 @@ public:
      * @param op the associative, invertible binary operator
      * @param inverseOp the inverse of the binary operator
      * @param identity identity value with regards to this binary operator
+     * @param allocator the allocator to construct and destroy elements
      */
-    binary_indexed_tree(std::size_t size, const_reference value, const Operator& op,
-        const InverseOperator& inverseOp, T identity=T()) requires std::copy_constructible<T>
-        : length(size + 1), op(op), inverse_op(inverseOp), identity(identity) {
-        data = static_cast<T*>(::operator new(sizeof(T) * length));
+    binary_indexed_tree(std::size_t size, const_reference value, const Operator& op = Operator(),
+                        const InverseOperator& inverseOp = InverseOperator(), T identity=T(), 
+                        const Allocator& allocator = Allocator()) requires std::copy_constructible<T>
+        : length(size + 1), op(op), inverse_op(inverseOp), identity(identity), allocator(allocator) {
+        fill_initialize_helper(value);
+    }
+
+    /**
+     * @brief Construct a new binary indexed tree from a range
+     * 
+     * The binary indexed tree will have the same content as the range defined
+     * by the two iterators
+     * 
+     * @tparam InputIt the type of the input iterator
+     * @param first the inclusive begin of the range
+     * @param last the exclusive end of the range
+     * @param op the associative, invertible binary operator
+     * @param inverseOp the inverse of the binary operator
+     * @param identity identity value with regards to this binary operator
+     */
+    template<std::forward_iterator InputIt>
+    binary_indexed_tree(InputIt first, InputIt last, const Operator& op = const Operator& op = Operator(),
+                        const InverseOperator& inverseOp = InverseOperator(), T identity=T(), 
+                        const Allocator& allocator = Allocator()) requires std::copy_constructible<T>
+        : length(std::distance(first, last) + 1), op(op), inverse_op(inverseOp), identity(identity), allocator(allocator) {
+        data = alloc_traits::allocate(this -> allocator, length);
         try {
-            // all filled elements will be destroyed when one constructor call throws an exception
-            std::uninitialized_fill_n(data + 1, size, value);
+            uninitialized_copy(first, last, data + 1, this -> allocator);
         } catch (...) {
-            // The raw memory must be deallocated
-            ::operator delete(data);
+            alloc_traits::deallocate(this -> allocator, data, length);
             throw;
         }
         initialize(data, length);
     }
+
 
     /**
      * @brief Copy constructor
@@ -111,13 +160,13 @@ public:
      * @param other the binary indexed tree to copy from
      */
     binary_indexed_tree(const binary_indexed_tree& other) requires std::copy_constructible<T>
-        : length(other.length), op(other.op), inverse_op(other.inverse_op), identity(other.identity) {
-        data = static_cast<T*>(::operator new(sizeof(T) * length));
+        : length(other.length), op(other.op), inverse_op(other.inverse_op), identity(other.identity), allocator(other.allocator) {
+        data = alloc_traits::allocate(allocator, length);
         try {
-            std::uninitialized_copy(other.data + 1, other.data + other.length - 1, data + 1);
+            uninitialized_copy(other.data + 1, other.data + other.length, data + 1, allocator);
         } catch (...) {
             // The raw memory must be deallocated
-            ::operator delete(data);
+            alloc_traits::deallocate(allocator, data, length);
             throw;
         }
     }
@@ -138,35 +187,17 @@ public:
     }
 
     /**
-     * @brief Construct a new binary indexed tree from a range
-     * 
-     * The binary indexed tree will have the same content as the range defined
-     * by the two iterators
-     * 
-     * @tparam InputIt the type of the input iterator
-     * @param first the inclusive begin of the range
-     * @param last the exclusive end of the range
-     * @param op the associative, invertible binary operator
-     * @param inverseOp the inverse of the binary operator
-     * @param identity identity value with regards to this binary operator
-     */
-    template<std::forward_iterator InputIt>
-    binary_indexed_tree(InputIt first, InputIt last, const Operator& op,
-        const InverseOperator& inverseOp, T identity=T()) requires std::copy_constructible<T>
-        : length(std::distance(first, last) + 1), op(op), inverse_op(inverseOp), identity(identity) {
-        data = static_cast<T*>(::operator new(sizeof(T) * length));
-        std::uninitialized_copy(first, last, data + 1);
-        initialize(data, length);
-    }
-
-    /**
      * @brief Destructor
      * 
      * Destroy all data in the binary indexed tree and free memory allocated
      */
-    ~binary_indexed_tree() {
-        std::unique_ptr<T, deleter<T> > cleaner(data);
-        std::destroy(data + 1, data + length);
+    ~binary_indexed_tree() noexcept {
+        // If the tree was moved, its data is null
+        if (data == nullptr) {
+            return;
+        }
+        destroy(data + 1, data + length, allocator);
+        alloc_traits::deallocate(allocator, data, length);
     }
 
     /**
@@ -300,12 +331,53 @@ public:
         }
     }
 
-    void swap(binary_indexed_tree& other) noexcept {
+    /**
+     * @brief Get the associated identity value
+     */
+    T get_identity() {
+        return identity;
+    }
+
+    /**
+     * @brief Get the associated allocator
+     */
+    Allocator get_allocator() {
+        return allocator;
+    }
+
+    /**
+     * @brief Swap content with another binary indexed tree
+     * 
+     * @param other the other binary indexed tree to swap from
+     */
+    void swap(binary_indexed_tree& other) noexcept(std::is_nothrow_swappable_v<Operator> && std::is_nothrow_swappable_v<InverseOperator> 
+                                                                                         && std::is_nothrow_swappable_v<value_type>) {
         std::swap(length, other.length);
         std::swap(data, other.data);
         std::swap(op, other.op);
         std::swap(inverse_op, other.inverse_op);
         std::swap(identity, other.identity);
+        std::swap(allocator, other.allocator);
+    }
+
+    /**
+     * @brief Check equality of two binary indexed trees
+     * 
+     * @param tree1 the first binary indexed tree
+     * @param tree2 the second binary indexed tree
+     * @return true if their contents are equal, false otherwise
+     */
+    friend bool operator==(const binary_indexed_tree& tree1, const binary_indexed_tree& tree2) requires equality_comparable<value_type> {
+        if (tree1.size() != tree2.size()) {
+            return false;
+        }
+        for (const_pointer it1 = tree1.data + 1, it1 = tree2.data + 1; 
+             it1 != tree1.data + length && it2 != tree2.data + length; ++it1, ++it2) {
+            if (!(*it1 == *it2)) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 }

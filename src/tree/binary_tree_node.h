@@ -3,83 +3,14 @@
 
 
 namespace algo {
-
 /**
- * @brief Interface for iterable binary tree node
+ * @brief A deleter that does nothing so that compiler doesn't try to instantiate deleted node destructors
  * 
- * @tparam T the type of the value in the node
+ * @tparam T the type of elements to delete
  */
-template <typename T>
-class iterable_node {
-public:
-    T value;
-
-private:
-    /**
-     * Non virtual interface (NVI) idiom because binary_tree_node_base class is a CRTP
-     * class. Most of its methods return the underyling type for ease of use. If we use regular
-     * approach (virtual method and override), the return type of those methods will have to be a
-     * pointer to a subclass of iterable_node (covariant return type). However, the compiler doesn't
-     * know the derived class of binary_tree_node_base is actually derived class at the
-     * instantiation of iterable_node because the derived class is still incomplete. That makes
-     * covariant return type impossible.
-     * 
-     * With NVI, we can hide the virtual method hierachy from the outside. The next and prev methods
-     * of the parent and child can return unreleated types (though we know they ARE covariant).
-     */
-
-    /**
-     * @brief Get the successor of this node
-     */
-    virtual iterable_node* do_next() const noexcept = 0;
-
-    /**
-     * @brief Get the predecessor of this node
-     */
-    virtual iterable_node* do_prev() const noexcept = 0;
-
-public:
-    /**
-     * @brief Construct a new iterable_node object with default value
-     */
-    iterable_node() = default;
-
-    // There should never be a scenario where we need to duplicate a node
-    // We should always operate on pointers to node
-    iterable_node(const iterable_node& other) = delete;
-    iterable_node(iterable_node&& other) = delete;
-
-    /**
-     * @brief Create a new iterable node given the arguments to construct a value
-     * 
-     * This constructor is disabled if the parameter pack is a singleton and
-     * expanded to a type that decays to this class or its derived class.
-     * This is intentional so the copy/move constructors won't be overshadowed
-     * 
-     * @tparam Args the arguments to construct a value
-     */
-    template <typename... Args>
-    requires (!singleton_pack_decayable_to<iterable_node, Args...>)
-    iterable_node(Args&&... args) : value(std::forward<Args>(args)...) { }
-
-    /**
-     * @brief virtual destructor
-     */
-    virtual ~iterable_node() = default;
-
-    /**
-     * @brief Get the successor of this node
-     */
-    iterable_node* next() const noexcept {
-        return do_next();
-    }
-
-    /**
-     * @brief Get the predecessor of this node
-     */
-    iterable_node* prev() const noexcept {
-        return do_prev();
-    }
+template<typename T>
+struct stub_deleter {
+    void operator()(T*) { }
 };
 
 /**
@@ -91,31 +22,23 @@ public:
  * @tparam Derived the type of derived binary tree node
  */
 template <typename T, typename Derived>
-class binary_tree_node_base : public iterable_node<T> {
+class binary_tree_node_base {
 public:
+    using value_type = T;
+
+    using unique_ptr_type = std::unique_ptr<Derived, stub_deleter<Derived> >;
+    value_type value;
     // Take ownership of child pointers
-    std::unique_ptr<Derived> left_child;
-    std::unique_ptr<Derived> right_child;
+    unique_ptr_type left_child;
+    unique_ptr_type right_child;
     // Parent pointer is only for observation
     Derived* parent;
 
-    /**
-     * @brief Construct a new binary tree node base object
-     * 
-     * Value is default constructued
-     * All child and parent pointers are null initialized
-     */
-    binary_tree_node_base() requires std::default_initializable<T> : parent(nullptr) { }
-
-    /**
-     * @brief Construct a new binary tree node base object with 
-     *        arguments to construct the value
-     * 
-     * @tparam Args the arguments to construct the value
-     */
-    template <typename... Args>
-    requires (!singleton_pack_decayable_to<binary_tree_node_base, Args...>)
-    binary_tree_node_base(Args&&... args) : iterable_node<T>(std::forward<Args>(args)...), parent(nullptr) { }
+    // We should never construct binary_tree_node_base through constructor
+    // Doing so will inevitably involves some form of constructor of iterable_node, 
+    // and some form of constructor of T will be invoked
+    // We want to use allocator to construct all objects of type T
+    binary_tree_node_base() = delete;
 
     // There should never be a scenario where we need to duplicate a node
     // We should always operate on pointers to node
@@ -123,9 +46,11 @@ public:
     binary_tree_node_base(binary_tree_node_base&& other) = delete;
 
     /**
-     * @brief virtual destructor
+     * @brief Never use the destructor since it will destroy the value
+     * 
+     * We rely on node_deleter to destroy the value with allocator_triats
      */
-    virtual ~binary_tree_node_base() = default;
+    ~binary_tree_node_base() = delete;
 
     /**
      * @brief Get a reference to the underlying node type
@@ -223,7 +148,7 @@ public:
      * @return the old left child if it exists
      *         nullptr if it doesn't
      */
-    Derived* link_left_child(std::unique_ptr<Derived>&& child) noexcept {
+    Derived* link_left_child(unique_ptr_type&& child) noexcept {
         Derived* old_child = orphan_left_child();
         left_child = std::move(child);
         left_child -> parent = underlying_ptr();
@@ -239,7 +164,7 @@ public:
      * @return the old left child if it exists
      *         nullptr if it doesn't
      */
-    Derived* safe_link_left_child(std::unique_ptr<Derived>&& child) noexcept {
+    Derived* safe_link_left_child(unique_ptr_type&& child) noexcept {
         if (child) {
             return link_left_child(std::move(child));
         }
@@ -259,7 +184,7 @@ public:
         if (child == left_child.get()) {
             return child;
         }
-        return link_left_child(std::unique_ptr<Derived>(child));
+        return link_left_child(unique_ptr_type(child, left_child.get_deleter()));
     }
 
     /**
@@ -287,7 +212,7 @@ public:
      * @return the old right child if it exists
      *         nullptr if it doesn't
      */
-    Derived* link_right_child(std::unique_ptr<Derived>&& child) noexcept {
+    Derived* link_right_child(unique_ptr_type&& child) noexcept {
         Derived* old_child = orphan_right_child();
         right_child = std::move(child);
         right_child -> parent = underlying_ptr();
@@ -303,7 +228,7 @@ public:
      * @return the old right child if it exists
      *         nullptr if it doesn't
      */
-    Derived* safe_link_right_child(std::unique_ptr<Derived>&& child) noexcept {
+    Derived* safe_link_right_child(unique_ptr_type&& child) noexcept {
         if (child) {
             return link_right_child(std::move(child));
         }
@@ -323,7 +248,7 @@ public:
         if (child == right_child.get()) {
             return child;
         }
-        return link_right_child(std::unique_ptr<Derived>(child));
+        return link_right_child(unique_ptr_type(child, right_child.get_deleter()));
     }
 
     /**
@@ -352,7 +277,7 @@ public:
      * @return the old child if it exists
      *         nullptr if it doesn't
      */
-    Derived* link_child(std::unique_ptr<Derived>&& child, bool is_left_child) noexcept {
+    Derived* link_child(unique_ptr_type&& child, bool is_left_child) noexcept {
         if (is_left_child) {
             return link_left_child(std::move(child));
         }
@@ -369,7 +294,7 @@ public:
      * @return the old child if it exists
      *         nullptr if it doesn't
      */
-    Derived* safe_link_child(std::unique_ptr<Derived>&& child, bool is_left_child) noexcept {
+    Derived* safe_link_child(unique_ptr_type&& child, bool is_left_child) noexcept {
         if (!child) {
             if (is_left_child) {
                 return orphan_left_child();
@@ -460,25 +385,6 @@ public:
             curr = curr -> right_child.get();
         }
         return curr;
-    }
-
-private:
-    /**
-     * NVI private overriding methods
-     */
-
-    /**
-     * @brief Get the successor of this node
-     */
-    binary_tree_node_base* do_next() const noexcept override {
-        return next();
-    }
-
-    /**
-     * @brief Get the predecessor of this node
-     */
-    binary_tree_node_base* do_prev() const noexcept override {
-        return prev();
     }
 
 public:
@@ -574,6 +480,34 @@ public:
         return original_left_child;
     }
 
+    template <typename Allocator, typename... Args>
+    requires std::same_as<Derived, typename Allocator::value_type>
+    static Derived* construct(Allocator& allocator, Args&&... args) {
+        using alloc_traits = std::allocator_traits<Allocator>;
+        Derived* node = alloc_traits::allocate(allocator, 1);
+        try {
+            alloc_traits::construct(allocator, &node -> value, std::forward<Args>(args)...);
+        } catch (...) {
+            alloc_traits::deallocate(allocator, node, 1);
+            throw;
+        }
+        node -> parent = nullptr;
+        new(&node -> left_child) unique_ptr_type;
+        new(&node -> right_child) unique_ptr_type;
+        return node;
+    }
+
+    template <typename Allocator>
+    requires std::same_as<Derived, typename Allocator::value_type>
+    static Derived* construct_sentinel(Allocator& allocator) {
+        using alloc_traits = std::allocator_traits<Allocator>;
+        Derived* node = alloc_traits::allocate(allocator, 1);
+        node -> parent = nullptr;
+        new(&node -> left_child) unique_ptr_type;
+        new(&node -> right_child) unique_ptr_type;
+        return node;
+    }
+
     /**
      * @brief Make a shallow clone by only copying the value
      * 
@@ -581,8 +515,10 @@ public:
      * 
      * @return a clone of this node
      */
-    Derived* clone() const {
-        return underlying_const_ref().clone();
+    template <typename Allocator>
+    requires std::same_as<Derived, typename Allocator::value_type>
+    Derived* clone(Allocator& allocator) const {
+        return Derived::construct(allocator, value);
     }
     
     /**
@@ -592,8 +528,10 @@ public:
      * 
      * @return a deep clone of this node
      */
-    Derived* deep_clone() const {
-        Derived* clone_root = clone();
+    template <typename Allocator>
+    requires std::same_as<Derived, typename Allocator::value_type>
+    Derived* deep_clone(Allocator& allocator) const {
+        Derived* clone_root = underlying_const_ptr() -> clone(allocator);
         const Derived* original_curr = underlying_const_ptr();
         Derived* clone_curr = clone_root;
         // We will deep clone this node by doing iterative preorder traversal
@@ -602,7 +540,7 @@ public:
             // If the left child is not nullptr,
             // clone it and move to the new left child
             if (original_curr -> left_child) {
-                clone_curr -> link_left_child(original_curr -> left_child -> clone());
+                clone_curr -> link_left_child(original_curr -> left_child -> clone(allocator));
                 original_curr = original_curr -> left_child.get();
                 clone_curr = clone_curr -> left_child.get();
             } else {
@@ -656,12 +594,55 @@ public:
                 if (original_curr == parent) {
                     break;
                 }
-                clone_curr -> link_right_child(original_curr -> right_child -> clone());
+                clone_curr -> link_right_child(original_curr -> right_child -> clone(allocator));
                 original_curr = original_curr -> right_child.get();
                 clone_curr = clone_curr -> right_child.get();
             }
         }
         return clone_root;
+    }
+
+
+    template <typename Allocator>
+    requires std::same_as<Derived, typename Allocator::value_type>
+    void destroy(Allocator& allocator) {
+        using alloc_traits = std::allocator_traits<Allocator>;
+        alloc_traits::destroy(allocator, &this -> value);
+        alloc_traits::deallocate(allocator, underlying_ptr(), 1);
+    }
+
+    template <typename Allocator>
+    requires std::same_as<Derived, typename Allocator::value_type>
+    void deep_destroy(Allocator& allocator) {
+        if (left_child) {
+            left_child.release() -> deep_destroy(allocator);
+        }
+        if (right_child) {
+            right_child.release() -> deep_destroy(allocator);
+        }
+        underlying_ptr() -> destroy(allocator);
+    }
+
+    /**
+     * @brief Check if all nodes of in this tree have their parent/children pointers set correctly
+     * 
+     * @param node the root of the tree
+     * @return true iff all nodes and their children are doubly linked
+     */
+    bool __is_parent_child_link_mutual() const noexcept {
+        if (left_child) {
+            left_child -> __is_parent_child_link_mutual();
+            if (left_child -> parent != this) {
+                return false;
+            }
+        }
+        if (right_child) {
+            right_child -> __is_parent_child_link_mutual();
+            if (right_child -> parent != this) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 
@@ -671,11 +652,5 @@ public:
  * @tparam T the type of the value of the node
  */
 template <class T>
-class binary_tree_node: public binary_tree_node_base<T, binary_tree_node<T> > {
-public:
-    using binary_tree_node_base<T, binary_tree_node<T> >::binary_tree_node_base;
-    binary_tree_node* clone() const {
-        return new binary_tree_node(this -> value);
-    }
-};
+class binary_tree_node: public binary_tree_node_base<T, binary_tree_node<T> > { };
 }

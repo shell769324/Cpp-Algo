@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 #include "utility/constructor_stub.h"
 #include "utility/common.h"
+#include "utility/tracking_allocator.h"
 
 namespace {
     using namespace algo;
@@ -39,19 +40,24 @@ namespace {
     class set_test : public testing::Test {
         public:
         thread_pool_executor executor;
+        typename T::allocator_type allocator;
         protected:
         static void SetUpTestCase() {
             std::srand(7759);
         }
 
         virtual void SetUp() {
+            tracking_allocator<typename T::node_type>::reset();
+            tracking_allocator<typename T::value_type>::reset();
             constructor_stub::reset_constructor_destructor_counter();
         }
 
         virtual void TearDown() {
             EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+            tracking_allocator<typename T::node_type>::check();
+            tracking_allocator<typename T::value_type>::check();
         }
-
+        public:
         static void equivalence_test(const T& set, std::vector<typename T::value_type>& stubs) {
             for (auto& stub : stubs) {
                 EXPECT_TRUE(set.contains(stub));
@@ -107,14 +113,13 @@ namespace {
                     for (int j = 0; j <= i; ++j) {
                         EXPECT_TRUE(set.contains(stubs[j]));
                     }
-                    EXPECT_TRUE(set.is_valid());
+                    EXPECT_TRUE(set.__is_valid());
                 }
                 ++i;
             }
         }
 
         static void erase_by_key(std::size_t size) {
-            
             auto stubs = get_random_stub_vector(size);
             T set(stubs.cbegin(), stubs.cend());
             std::size_t curr_size = size;
@@ -125,13 +130,11 @@ namespace {
                 set.erase(stub);
                 check_constructor_counts();
                 --curr_size;
-                //EXPECT_EQ(set.find(stub), set.cend());
-                //EXPECT_EQ(set.size(), curr_size);
                 if (curr_size % skip == 0 && size == 10) {
-                    EXPECT_TRUE(set.is_valid());
+                    EXPECT_TRUE(set.__is_valid());
                 }
             }
-            EXPECT_TRUE(set.is_empty());
+            EXPECT_TRUE(set.empty());
         }
 
         static void erase_by_iterator(std::size_t size) {
@@ -140,7 +143,7 @@ namespace {
             std::size_t curr_size = size;
             typename T::iterator it = set.begin();
             unsigned skip = std::max(size / REPEAT, (std::size_t) 1);
-            while (!set.is_empty()) {
+            while (!set.empty()) {
                 typename T::value_type stub = *it;
                 EXPECT_NE(set.find(stub), set.end());
                 mark_constructor_counts();
@@ -150,57 +153,65 @@ namespace {
                 EXPECT_EQ(set.find(stub), set.cend());
                 EXPECT_EQ(set.size(), curr_size);
                 if (curr_size % skip == 0) {
-                    EXPECT_TRUE(set.is_valid());
+                    EXPECT_TRUE(set.__is_valid());
                 }
             }
-            EXPECT_TRUE(set.is_empty());
+            EXPECT_TRUE(set.empty());
             EXPECT_EQ(it, set.end());
         }
 
         template<typename Set>
-        static void max_leq_test_template() {
+        static void upper_bound_test_template() {
             auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+            // Create gap between all numbers
+            for (auto& stub : stubs) {
+                stub.id *= 2;
+            }
             T src(stubs.cbegin(), stubs.cend());
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
             Set& set = src;
             // With existing element
-            for (unsigned i = 0; i < stubs.size(); ++i) {
-                EXPECT_EQ(*set.max_leq(stubs[i]), stubs[i]);
+            for (unsigned i = 0; i + 1 < stubs.size(); ++i) {
+                EXPECT_EQ(*set.upper_bound(stubs[i]), stubs[i + 1]);
             }
             // With absent element
             for (unsigned i = 0; i < stubs.size() - 1; ++i) {
                 if (stubs[i + 1].id - stubs[i].id >= 2) {
                     int num = (stubs[i + 1].id + stubs[i].id) / 2;
-                    auto& stub = *set.max_leq(constructor_stub(num));
-                    EXPECT_EQ(stub.id, stubs[i].id);
+                    auto& stub = *set.upper_bound(constructor_stub(num));
+                    EXPECT_EQ(stub.id, stubs[i + 1].id);
                     EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(stub)>>,
                             std::is_const_v<Set>);
                 }
             }
-            EXPECT_EQ(set.max_leq(stubs.front().id - 1), set.end());
+            EXPECT_EQ(set.upper_bound(stubs.back().id + 1), set.end());
         }
 
         template <typename Set>
-        static void min_geq_test_template() {
+        static void lower_bound_test_template() {
             auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+            // Create gap between all numbers
+            for (auto& stub : stubs) {
+                stub.id *= 2;
+            }
             T src(stubs.cbegin(), stubs.cend());
             Set& set = src;
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
             // With existing element
             for (unsigned i = 0; i < stubs.size(); ++i) {
-                EXPECT_EQ(*set.min_geq(stubs[i]), stubs[i]);
+                EXPECT_EQ(*set.lower_bound(stubs[i]), stubs[i]);
             }
             // With absent element
             for (unsigned i = 1; i < stubs.size(); ++i) {
                 if (stubs[i].id - stubs[i - 1].id >= 2) {
                     int num = (stubs[i].id + stubs[i - 1].id) / 2;
-                    auto& stub = *set.min_geq(constructor_stub(num));
+                    auto& stub = *set.lower_bound(constructor_stub(num));
                     EXPECT_EQ(stub.id, stubs[i].id);
                     EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(stub)>>,
                             std::is_const_v<Set>);
                 }
             }
-            EXPECT_EQ(set.min_geq(stubs.back().id + 1), set.end());
+            EXPECT_EQ(set.lower_bound(stubs.back().id + 1), set.end());
         }
 
         template<typename Resolver>
@@ -215,7 +226,7 @@ namespace {
                 set = union_of<Resolver>(std::move(set_copy1), std::move(set_copy2), resolver);
             }
             check_constructor_counts();
-            EXPECT_TRUE(set.is_valid());
+            EXPECT_TRUE(set.__is_valid());
             // No element is missing
             for (const auto& stub : set1) {
                 EXPECT_NE(set.find(stub), set.end());
@@ -253,7 +264,7 @@ namespace {
                 set = intersection_of<Resolver>(std::move(set_copy1), std::move(set_copy2), resolver);
             }
             check_constructor_counts();
-            EXPECT_TRUE(set.is_valid());
+            EXPECT_TRUE(set.__is_valid());
             // No extraneous elements
             for (const auto& stub : set) {
                 EXPECT_TRUE(set1.find(stub) != set1.end() && set2.find(stub) != set2.end());
@@ -284,7 +295,7 @@ namespace {
                 set = difference_of(std::move(set_copy1), std::move(set_copy2));
             }
             check_constructor_counts();
-            EXPECT_TRUE(set.is_valid());
+            EXPECT_TRUE(set.__is_valid());
             // No extraneous elements
             for (const auto& stub : set) {
                 EXPECT_TRUE(set1.find(stub) != set1.end() && set2.find(stub) == set2.end());
@@ -319,15 +330,97 @@ namespace {
 
     TYPED_TEST_SUITE_P(set_test);
 
+    TYPED_TEST_P(set_test, trait_test) {
+        using const_node_type = constify<constructor_stub, typename TypeParam::node_type>;
+        bool correct = std::is_same_v<typename TypeParam::key_type, constructor_stub>
+            && std::is_same_v<typename TypeParam::value_type, constructor_stub>
+            && std::is_same_v<typename TypeParam::size_type, std::size_t>
+            && std::is_same_v<typename TypeParam::difference_type, std::ptrdiff_t>
+            && std::is_same_v<typename TypeParam::value_compare, constructor_stub_comparator>
+            && std::is_same_v<typename TypeParam::allocator_type, tracking_allocator<constructor_stub> >
+            && std::is_same_v<typename TypeParam::reference, constructor_stub&>
+            && std::is_same_v<typename TypeParam::const_reference, const constructor_stub&>
+            && std::is_same_v<typename TypeParam::pointer, constructor_stub*>
+            && std::is_same_v<typename TypeParam::const_pointer, const constructor_stub*>
+            && std::is_same_v<typename TypeParam::iterator, binary_tree_iterator<typename TypeParam::node_type, false> >
+            && std::is_same_v<typename TypeParam::const_iterator, binary_tree_iterator<const_node_type, false> >
+            && std::is_same_v<typename TypeParam::reverse_iterator, binary_tree_iterator<typename TypeParam::node_type, true> >
+            && std::is_same_v<typename TypeParam::const_reverse_iterator, binary_tree_iterator<const_node_type, true> >;
+        EXPECT_TRUE(correct);
+    }
+    
+    template <typename Set>
+    void default_constructor_test_helper(Set& set) {
+        EXPECT_TRUE(set.__is_valid());
+        EXPECT_EQ(constructor_stub::constructor_invocation_count, 0);
+        EXPECT_EQ(allocated<typename Set::node_type>, 1);
+    }
 
     TYPED_TEST_P(set_test, default_constructor_test) {
         TypeParam set;
+        default_constructor_test_helper(set);
     }
 
-    TYPED_TEST_P(set_test, comp_constructor_test) {
+    TYPED_TEST_P(set_test, allocator_constructor_test) {
+        TypeParam set(this -> allocator);
+        default_constructor_test_helper(set);
+        EXPECT_EQ(this -> allocator, set.get_allocator());
+    }
+
+    template <typename Set, typename Comp>
+    void comp_allocator_constructor_test_helper(Set& set, Comp& comp) {
+        EXPECT_EQ(constructor_stub::constructor_invocation_count, 0);
+        EXPECT_EQ(allocated<typename Set::node_type>, 1);
+        EXPECT_EQ(comp, set.value_comp());
+    }
+
+    TYPED_TEST_P(set_test, comp_allocator_constructor_test) {
+        constructor_stub_comparator comp(true);
+        TypeParam set(comp, this -> allocator);
+        comp_allocator_constructor_test_helper(set, comp);
+        EXPECT_EQ(this -> allocator, set.get_allocator());
+    }
+
+    TYPED_TEST_P(set_test, comp_allocator_constructor_optional_test) {
         constructor_stub_comparator comp(true);
         TypeParam set(comp);
-        EXPECT_TRUE(set.value_comp().reverse);
+        comp_allocator_constructor_test_helper(set, comp);
+    }
+
+    template <typename Set, typename Stubs>
+    void comp_allocator_range_constructor_test_helper(Set& set, Stubs& stubs) {
+        set_test<Set>::equivalence_test(set, stubs);
+        EXPECT_EQ(allocated<typename Set::node_type>, stubs.size() + 1);
+    }
+
+    TYPED_TEST_P(set_test, comp_allocator_range_constructor_test) {
+        constructor_stub_comparator comp;
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        TypeParam set(stubs.begin(), stubs.end(), comp, this -> allocator);
+        comp_allocator_range_constructor_test_helper(set, stubs);
+        EXPECT_EQ(comp, set.value_comp());
+        EXPECT_EQ(this -> allocator, set.get_allocator());
+    }
+
+    TYPED_TEST_P(set_test, comp_allocator_range_constructor_optional_allocator_test) {
+        constructor_stub_comparator comp;
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        TypeParam set(stubs.begin(), stubs.end(), comp);
+        comp_allocator_range_constructor_test_helper(set, stubs);
+        EXPECT_EQ(comp, set.value_comp());
+    }
+
+    TYPED_TEST_P(set_test, comp_allocator_range_constructor_both_optional_test) {
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        TypeParam set(stubs.begin(), stubs.end());
+        comp_allocator_range_constructor_test_helper(set, stubs);
+    }
+
+    TYPED_TEST_P(set_test, allocator_range_constructor_test) {
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        TypeParam set(stubs.begin(), stubs.end(), this -> allocator);
+        comp_allocator_range_constructor_test_helper(set, stubs);
+        EXPECT_EQ(this -> allocator, set.get_allocator());
     }
 
     TYPED_TEST_P(set_test, copy_constructor_test) {
@@ -335,23 +428,56 @@ namespace {
         constructor_stub_comparator comp(true);
         TypeParam set(comp);
         set.insert(stubs.begin(), stubs.end());
+        EXPECT_TRUE(set.__is_valid());
+        std::size_t alloc_count = allocated<typename TypeParam::node_type>;
         TypeParam set_copy(set);
-        EXPECT_TRUE(set_copy.is_valid());
+        EXPECT_EQ(alloc_count + SMALL_LIMIT + 1, allocated<typename TypeParam::node_type>);
+        EXPECT_TRUE(set_copy.__is_valid());
         EXPECT_TRUE(set_copy.value_comp().reverse);
         this -> equivalence_test(set_copy, stubs);
+        EXPECT_EQ(set.get_allocator(), set_copy.get_allocator());
+    }
+
+    TYPED_TEST_P(set_test, allocator_copy_constructor_test) {
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        constructor_stub_comparator comp(true);
+        TypeParam set(comp);
+        set.insert(stubs.begin(), stubs.end());
+        std::size_t alloc_count = allocated<typename TypeParam::node_type>;
+        TypeParam set_copy(set, this -> allocator);
+        EXPECT_EQ(alloc_count + SMALL_LIMIT + 1, allocated<typename TypeParam::node_type>);
+        EXPECT_TRUE(set_copy.__is_valid());
+        EXPECT_TRUE(set_copy.value_comp().reverse);
+        this -> equivalence_test(set_copy, stubs);
+        EXPECT_EQ(this -> allocator, set_copy.get_allocator());
     }
 
     TYPED_TEST_P(set_test, move_constructor_test) {
         auto stubs = get_random_stub_vector(SMALL_LIMIT);
         constructor_stub_comparator comp(true);
-        TypeParam set(comp);
+        TypeParam set(comp, this -> allocator);
         set.insert(stubs.begin(), stubs.end());
         mark_constructor_counts();
         TypeParam set_copy(std::move(set));
         check_constructor_counts();
-        EXPECT_TRUE(set_copy.is_valid());
+        EXPECT_TRUE(set_copy.__is_valid());
         EXPECT_TRUE(set_copy.value_comp().reverse);
         this -> equivalence_test(set_copy, stubs);
+        EXPECT_EQ(this -> allocator, set_copy.get_allocator());
+    }
+
+    TYPED_TEST_P(set_test, allocator_move_constructor_test) {
+        auto stubs = get_random_stub_vector(SMALL_LIMIT);
+        constructor_stub_comparator comp(true);
+        TypeParam set(comp);
+        set.insert(stubs.begin(), stubs.end());
+        mark_constructor_counts();
+        TypeParam set_copy(std::move(set), this -> allocator);
+        check_constructor_counts();
+        EXPECT_TRUE(set_copy.__is_valid());
+        EXPECT_TRUE(set_copy.value_comp().reverse);
+        this -> equivalence_test(set_copy, stubs);
+        EXPECT_EQ(this -> allocator, set_copy.get_allocator());
     }
 
     TYPED_TEST_P(set_test, assignment_operator_test) {
@@ -361,7 +487,7 @@ namespace {
         set1.insert(stubs.begin(), stubs.end());
         TypeParam set2;
         set2 = set1;
-        EXPECT_TRUE(set2.is_valid());
+        EXPECT_TRUE(set2.__is_valid());
         this -> equivalence_test(set2, stubs);
     }
 
@@ -374,14 +500,8 @@ namespace {
         mark_constructor_counts();
         set2 = std::move(set1);
         check_constructor_counts();
-        EXPECT_TRUE(set2.is_valid());
+        EXPECT_TRUE(set2.__is_valid());
         this -> equivalence_test(set2, stubs);
-    }
-    
-    TYPED_TEST_P(set_test, range_constructor_test) {
-        auto stubs = get_random_stub_vector(SMALL_LIMIT);
-        TypeParam set(stubs.begin(), stubs.end());
-        this -> equivalence_test(set, stubs);
     }
 
     // Iterator tests
@@ -428,11 +548,11 @@ namespace {
         EXPECT_EQ(i, MEDIUM_LIMIT);
     }
 
-    TYPED_TEST_P(set_test, is_empty_test) {
+    TYPED_TEST_P(set_test, empty_test) {
         TypeParam set;
-        EXPECT_TRUE(set.is_empty());
+        EXPECT_TRUE(set.empty());
         set.emplace(SPECIAL_VALUE);
-        EXPECT_FALSE(set.is_empty());
+        EXPECT_FALSE(set.empty());
     }
 
     TYPED_TEST_P(set_test, size_test) {
@@ -446,7 +566,7 @@ namespace {
         auto stubs = get_random_stub_vector(SMALL_LIMIT);
         TypeParam set(stubs.begin(), stubs.end());
         set.clear();
-        EXPECT_TRUE(set.is_empty());
+        EXPECT_TRUE(set.empty());
     }
     
     // Core methods (find and insert) tests
@@ -503,7 +623,7 @@ namespace {
         for (unsigned i = 0; i < stubs.size(); ++i) {
             EXPECT_TRUE(set.contains(stubs[i]));
         }
-        EXPECT_TRUE(set.is_valid());
+        EXPECT_TRUE(set.__is_valid());
     }
 
     TYPED_TEST_P(set_test, emplace_lvalue_test) {
@@ -613,7 +733,7 @@ namespace {
             EXPECT_EQ(set.find(stubs[i]), set.end());
         }
         set.erase(set.begin(), set.end());
-        EXPECT_TRUE(set.is_empty());
+        EXPECT_TRUE(set.empty());
     }
 
     TYPED_TEST_P(set_test, swap_test) {
@@ -636,20 +756,20 @@ namespace {
     }
 
     // Upper bound and lower bound tests
-    TYPED_TEST_P(set_test, max_leq_test) {
-        this -> template max_leq_test_template<TypeParam>();
+    TYPED_TEST_P(set_test, upper_bound_test) {
+        this -> template upper_bound_test_template<TypeParam>();
     }
 
-    TYPED_TEST_P(set_test, max_leq_const_test) {
-        this -> template max_leq_test_template<const TypeParam>();
+    TYPED_TEST_P(set_test, upper_bound_const_test) {
+        this -> template upper_bound_test_template<const TypeParam>();
     }
 
-    TYPED_TEST_P(set_test, min_geq_test) {
-        this -> template min_geq_test_template<TypeParam>();
+    TYPED_TEST_P(set_test, lower_bound_test) {
+        this -> template lower_bound_test_template<TypeParam>();
     }
 
-    TYPED_TEST_P(set_test, min_geq_const_test) {
-        this -> template min_geq_test_template<const TypeParam>();
+    TYPED_TEST_P(set_test, lower_bound_const_test) {
+        this -> template lower_bound_test_template<const TypeParam>();
     }
 
     TYPED_TEST_P(set_test, union_of_basic_test) {
@@ -992,22 +1112,66 @@ namespace {
             }
         }
     }
+
+    TYPED_TEST_P(set_test, equality_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        TypeParam set1(stubs.cbegin(), stubs.cend());
+        TypeParam set2(stubs.cbegin(), stubs.cend());
+        EXPECT_EQ(set1, set2);
+    }
+
+    TYPED_TEST_P(set_test, inequality_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        TypeParam set1(stubs.cbegin(), stubs.cend());
+        TypeParam set2(stubs.cbegin(), stubs.cend() - 1);
+        EXPECT_NE(set1, set2);
+    }
+
+    TYPED_TEST_P(set_test, three_way_comparison_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        TypeParam set1(stubs.cbegin(), stubs.cend());
+        stubs.back().id++;
+        TypeParam set2(stubs.cbegin(), stubs.cend());
+        EXPECT_LE(set1, set2);
+        EXPECT_LT(set1, set2);
+        EXPECT_GT(set2, set1);
+        EXPECT_GE(set2, set1);
+    }
+
+    TYPED_TEST_P(set_test, three_way_comparison_length_test) {
+        auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        TypeParam set1(stubs.cbegin(), stubs.cend());
+        set1.erase(std::prev(set1.end()));
+        TypeParam set2(stubs.cbegin(), stubs.cend());
+        EXPECT_LE(set1, set2);
+        EXPECT_LT(set1, set2);
+        EXPECT_GT(set2, set1);
+        EXPECT_GE(set2, set1);
+    }
     
     REGISTER_TYPED_TEST_SUITE_P(set_test,
+        trait_test,
         default_constructor_test,
-        comp_constructor_test,
+        comp_allocator_constructor_test,
+        comp_allocator_constructor_optional_test,
+        allocator_constructor_test,
+        comp_allocator_range_constructor_test,
+        comp_allocator_range_constructor_optional_allocator_test,
+        comp_allocator_range_constructor_both_optional_test,
+        allocator_range_constructor_test,
         copy_constructor_test,
+        allocator_copy_constructor_test,
         move_constructor_test,
+        allocator_move_constructor_test,
         assignment_operator_test,
         move_assignment_operator_test,
-        range_constructor_test,
         begin_end_test,
         const_begin_end_test,
         cbegin_cend_test,
         rbegin_rend_test,
         const_rbegin_rend_test,
         crbegin_crend_test,
-        is_empty_test,
+        empty_test,
         size_test,
         clear_test,
         const_ref_insert_find_basic_test,
@@ -1031,10 +1195,10 @@ namespace {
         erase_range_test,
         swap_test,
         contains_test,
-        max_leq_test,
-        max_leq_const_test,
-        min_geq_test,
-        min_geq_const_test,
+        upper_bound_test,
+        upper_bound_const_test,
+        lower_bound_test,
+        lower_bound_const_test,
         union_of_basic_test,
         union_of_basic_parallel_test,
         union_of_conflict_basic_test,
@@ -1061,6 +1225,10 @@ namespace {
         difference_of_intermediate_parallel_test,
         difference_of_stress_test,
         difference_of_stress_parallel_test,
-        mixed_stress_test
+        mixed_stress_test,
+        equality_test,
+        inequality_test,
+        three_way_comparison_test,
+        three_way_comparison_length_test
     );
 }

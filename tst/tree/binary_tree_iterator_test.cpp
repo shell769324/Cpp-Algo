@@ -4,6 +4,7 @@
 #include "tst/tree/tree_test_util.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/common.h"
+#include "tst/tree/binary_tree_node_util.h"
 #include <iostream>
 
 
@@ -13,28 +14,41 @@ namespace {
     class binary_tree_iterator_test : public ::testing::Test {
     protected:
         virtual void SetUp() {
+            tracking_allocator<node_type>::reset();
             constructor_stub::reset_constructor_destructor_counter();
         }
 
         virtual void TearDown() {
             EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+            tracking_allocator<node_type>::check();
         }
     };
 
     static const int SMALL_LIMIT = 1 << 4;
 
     using node_type = binary_tree_node<constructor_stub>;
-    using node_iterator = binary_tree_iterator<constructor_stub>;
-    using const_node_iterator = binary_tree_iterator<const constructor_stub>;
-    using reverse_node_iterator = binary_tree_iterator<constructor_stub, true>;
+    using node_iterator = binary_tree_iterator<node_type>;
+    using const_node_iterator = binary_tree_iterator<binary_tree_node<const constructor_stub>>;
+    using reverse_node_iterator = binary_tree_iterator<node_type, true>;
+    using unique_ptr_type = binary_tree_node<constructor_stub>::unique_ptr_type;
+
+    TEST_F(binary_tree_iterator_test, trait_test) {
+        bool correct = std::is_same_v<node_iterator::iterator_category, std::bidirectional_iterator_tag>
+            && std::is_same_v<node_iterator::value_type, constructor_stub>
+            && std::is_same_v<node_iterator::reference, constructor_stub&>
+            && std::is_same_v<node_iterator::pointer, constructor_stub*>
+            && std::is_same_v<node_iterator::difference_type, std::ptrdiff_t>;
+        EXPECT_TRUE(correct);
+    }
 
     TEST_F(binary_tree_iterator_test, constructor_test) {
-        std::unique_ptr<node_type> node_ptr = std::make_unique<node_type>();
+        singleton_ptr_type node_ptr = make_singleton();
+        EXPECT_EQ(1, allocated<node_type>.load());
         node_iterator it(node_ptr.get());
     }
 
     TEST_F(binary_tree_iterator_test, access_test) {
-        std::unique_ptr<node_type> node_ptr = std::make_unique<node_type>();
+        singleton_ptr_type node_ptr = make_singleton();
         node_iterator it(node_ptr.get());
         EXPECT_EQ((*it).id, node_ptr -> value.id);
         ++(*it).id;
@@ -42,14 +56,14 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, const_access_test) {
-        std::unique_ptr<node_type> node_ptr = std::make_unique<node_type>();
+        singleton_ptr_type node_ptr = make_singleton();
         const_node_iterator it(node_ptr.get());
         EXPECT_EQ((*it).id, node_ptr -> value.id);
         EXPECT_TRUE(std::is_const_v<std::remove_reference_t<decltype(*std::declval<const_node_iterator&>())> >);
     }
 
     TEST_F(binary_tree_iterator_test, access_reference_test) {
-        std::unique_ptr<node_type> node_ptr = std::make_unique<node_type>();
+        singleton_ptr_type node_ptr = make_singleton();
         node_iterator it(node_ptr.get());
         EXPECT_EQ(it -> id, node_ptr -> value.id);
         ++it -> id;
@@ -57,7 +71,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, const_access_reference_test) {
-        std::unique_ptr<node_type> node_ptr = std::make_unique<node_type>();
+        singleton_ptr_type node_ptr = make_singleton();
         const_node_iterator it(node_ptr.get());
         EXPECT_EQ(it -> id, node_ptr -> value.id);
         EXPECT_TRUE(std::is_const_v<std::remove_reference_t<decltype((it->id))> >);
@@ -65,7 +79,7 @@ namespace {
 
     template<typename Iterator>
     void prefix_next_return_test() {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         Iterator it(root.get());
         Iterator next_it = ++it;
         EXPECT_EQ(it -> id, next_it -> id);
@@ -81,7 +95,7 @@ namespace {
 
     template<typename Iterator>
     void postfix_next_return_test() {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         Iterator it(root.get());
         Iterator next_it = it++;
         if constexpr (std::is_same_v<Iterator, reverse_node_iterator>) {
@@ -100,7 +114,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, prefix_forward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_leftmost_descendant();
         node_iterator it(curr);
         for (int i = 0; it != node_iterator(); ++i, ++it) {
@@ -109,7 +123,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, reverse_prefix_forward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_rightmost_descendant();
         reverse_node_iterator it(curr);
         for (int i = SMALL_LIMIT - 2; it != reverse_node_iterator(); --i, ++it) {
@@ -118,7 +132,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, postfix_forward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_leftmost_descendant();
         node_iterator it(curr);
         for (int i = 0; it != node_iterator(); ++i, ++it) {
@@ -127,7 +141,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, reverse_postfix_forward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_rightmost_descendant();
         reverse_node_iterator it(curr);
         for (int i = SMALL_LIMIT - 2; it != reverse_node_iterator(); --i, ++it) {
@@ -137,7 +151,7 @@ namespace {
 
     template<typename Iterator>
     void prefix_prev_return_test() {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         Iterator it(root.get());
         Iterator prev_it = --it;
         EXPECT_EQ(it -> id, prev_it -> id);
@@ -153,7 +167,7 @@ namespace {
 
     template<typename Iterator>
     void postfix_prev_return_test() {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         Iterator it(root.get());
         Iterator prev_it = it--;
         if constexpr (std::is_same_v<Iterator, reverse_node_iterator>) {
@@ -172,7 +186,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, prefix_backward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_rightmost_descendant();
         node_iterator it(curr);
         for (int i = SMALL_LIMIT - 2; it != node_iterator(); --i, --it) {
@@ -181,7 +195,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, reverse_prefix_backward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_leftmost_descendant();
         reverse_node_iterator it(curr);
         for (int i = 0; it != reverse_node_iterator(); ++i, --it) {
@@ -190,7 +204,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, postfix_backward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_rightmost_descendant();
         node_iterator it(curr);
         for (int i = SMALL_LIMIT - 2; it != node_iterator(); --i, it--) {
@@ -199,7 +213,7 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, reverse_postfix_backward_range_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_leftmost_descendant();
         reverse_node_iterator it(curr);
         for (int i = 0; it != reverse_node_iterator(); ++i, --it) {
@@ -209,7 +223,7 @@ namespace {
 
     template<typename Iterator>
     void equality_test() {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr;
         if constexpr (std::is_same_v<Iterator, reverse_node_iterator>) {
             curr = root -> get_rightmost_descendant();
@@ -232,14 +246,14 @@ namespace {
     }
 
     TEST_F(binary_tree_iterator_test, const_conversion_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_rightmost_descendant();
         node_iterator it(curr);
         const_node_iterator const_it(it);
     }
 
     TEST_F(binary_tree_iterator_test, mixed_const_equality_test) {
-        std::unique_ptr<node_type> root = create_perfectly_balance_tree(SMALL_LIMIT - 1, 0);
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
         node_type* curr = root -> get_rightmost_descendant();
         node_iterator it(curr);
         const_node_iterator const_it(it);

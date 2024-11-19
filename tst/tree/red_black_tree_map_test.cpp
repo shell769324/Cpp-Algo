@@ -23,7 +23,7 @@ namespace {
         }
     };
 
-    using stub_red_black_map_type = red_black_tree_map<constructor_stub, constructor_stub, constructor_stub_comparator>;
+    using stub_red_black_map_type = red_black_tree_map<constructor_stub, constructor_stub, constructor_stub_comparator, tracking_allocator<std::pair<const constructor_stub, constructor_stub> > >;
 
-    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree_map_interface, map_test, stub_red_black_map_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, map_test, stub_red_black_map_type);
 }

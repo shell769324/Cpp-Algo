@@ -5,6 +5,7 @@
 #include "tst/utility/constructor_stub.h"
 #include <numeric>
 #include "tst/utility/common.h"
+#include <climits>
 
 
 namespace {

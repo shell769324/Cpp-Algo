@@ -37,10 +37,11 @@ public:
     
     bool is_valid() noexcept;
 
+    friend bool operator==(const constructor_stub& stub1, const constructor_stub& stub2) noexcept;
+    friend std::strong_ordering operator<=>(const constructor_stub& stub1, const constructor_stub& stub2) noexcept;
+
     ~constructor_stub() noexcept;
 };
-
-bool operator==(const constructor_stub& a, const constructor_stub& b);
 
 struct constructor_stub_key_getter {
     int operator()(const constructor_stub& stub) const {
@@ -49,9 +50,9 @@ struct constructor_stub_key_getter {
 };
 
 struct constructor_stub_comparator {
-    constructor_stub_comparator() : reverse(false) { }
+    constructor_stub_comparator() : reverse(false), id(constructor_stub::counter.fetch_add(1)) { }
 
-    constructor_stub_comparator(bool reverse) : reverse(reverse) { }
+    constructor_stub_comparator(bool reverse) : reverse(reverse), id(constructor_stub::counter.fetch_add(1)) { }
 
     bool operator()(const constructor_stub& stub1, const constructor_stub& stub2) const {
         if (reverse) {
@@ -60,6 +61,11 @@ struct constructor_stub_comparator {
         return stub1.id < stub2.id;
     }
 
+    friend bool operator==(const constructor_stub_comparator& comp1, const constructor_stub_comparator& comp2) {
+        return comp1.id == comp2.id && comp1.reverse == comp2.reverse;
+    }
+
     bool reverse;
+    int id;
 };
 }

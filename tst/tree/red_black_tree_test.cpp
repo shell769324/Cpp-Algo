@@ -5,7 +5,9 @@
 #include "tst/tree/tree_test_util.h"
 #include "tst/tree/tree_bulk_operation_complexity_test.h"
 #include "tst/tree/tree_parallel_comparison_test.h"
+#include "tst/tree/tree_common_test.h"
 #include "tst/utility/common.h"
+#include "tst/utility/tracking_allocator.h"
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -17,8 +19,13 @@
 
 
 namespace {
-    
     using namespace algo;
+
+    using int_tree_type = red_black_tree<int, constructor_stub, constructor_stub_key_getter>;
+    using stub_tree_type = red_black_tree<constructor_stub, constructor_stub, std::identity, constructor_stub_comparator, tracking_allocator<constructor_stub> >;
+    using stub_node_type = stub_tree_type::node_type;
+    using stub_ptr_type = stub_tree_type::unique_ptr_type;
+
     class red_black_tree_test : public ::testing::Test {
     protected:
         static void SetUpTestCase() {
@@ -26,129 +33,38 @@ namespace {
         }
 
         virtual void SetUp() {
+            tracking_allocator<stub_node_type>::reset();
+            tracking_allocator<constructor_stub>::reset();
             constructor_stub::reset_constructor_destructor_counter();
         }
 
         virtual void TearDown() {
             EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+            tracking_allocator<stub_node_type>::check();
+            tracking_allocator<constructor_stub>::check();
         }
     };
 
-    static const int SPECIAL_VALUE = 0xdeadbeef;
-    static const int SRTESS_LIMIT = 100000;
-    static const int LIMIT = 10000;
-    static const int MEDIUM_LIMIT = 300;
-    static const int SMALL_LIMIT = 10;
-    static const double HEIGHT_CAP_RATIO = 1.44;
-
-    using int_tree_type = red_black_tree<int, constructor_stub, constructor_stub_key_getter>;
-    using stub_tree_type = red_black_tree<constructor_stub, constructor_stub, std::identity, constructor_stub_comparator>;
-    using stub_node_type = stub_tree_type::node_type;
-    using stub_ptr_type = std::unique_ptr<stub_node_type>;
-
-    void equivalence_test(const stub_tree_type& tree, std::vector<constructor_stub>& stubs) {
-            for (auto& stub : stubs) {
-                EXPECT_EQ(stub, *tree.find(stub));
-            }
-            EXPECT_EQ(tree.size(), stubs.size());
-        }
-
-    std::vector<constructor_stub> get_random_number_vector(std::size_t size, int lo = 0, int hi = LIMIT) {
-        std::unordered_set<int> ids;
-        while (ids.size() < size) {
-            ids.insert(random_number(lo, hi));
-        }
-        return std::vector<constructor_stub> (ids.cbegin(), ids.cend());
-    }
-
-    // Constructor and assignment operator tests
-    TEST_F(red_black_tree_test, default_constructor_test) {
-        int_tree_type tree;
-    }
-
-    TEST_F(red_black_tree_test, comparator_constructor_test) {
-        constructor_stub_comparator comparator(false);
-        stub_tree_type tree(comparator);
-        stub_tree_type tree2(constructor_stub_comparator(false));
-    }
-
-    TEST_F(red_black_tree_test, copy_constructor_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
-        stub_tree_type tree(stubs.cbegin(), stubs.cend());
-        stub_tree_type tree_copy(tree);
-        EXPECT_TRUE(tree_copy.is_valid());
-        equivalence_test(tree_copy, stubs);
-    }
-
-    TEST_F(red_black_tree_test, move_constructor_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
-        stub_tree_type tree(stubs.cbegin(), stubs.cend());
-        stub_tree_type tree_copy(tree);
-        int move_constructor_invocation_count = constructor_stub::move_constructor_invocation_count;
-        int copy_constructor_invocation_count = constructor_stub::copy_constructor_invocation_count;
-        stub_tree_type tree_move(std::move(tree));
-        EXPECT_EQ(move_constructor_invocation_count, constructor_stub::move_constructor_invocation_count);
-        EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
-        equivalence_test(tree_move, stubs);
-    }
-
-    TEST_F(red_black_tree_test, copy_assign_operator_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
-        stub_tree_type tree(stubs.cbegin(), stubs.cend());
-        stub_tree_type tree_copy;
-        tree_copy = tree;
-        equivalence_test(tree_copy, stubs);
-    }
-
-    TEST_F(red_black_tree_test, move_assign_operator_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
-        stub_tree_type tree(stubs.cbegin(), stubs.cend());
-        stub_tree_type tree_copy(tree);
-        int move_constructor_invocation_count = constructor_stub::move_constructor_invocation_count;
-        int copy_constructor_invocation_count = constructor_stub::copy_constructor_invocation_count;
-        stub_tree_type tree_move;
-        tree_move = std::move(tree);
-        EXPECT_EQ(move_constructor_invocation_count, constructor_stub::move_constructor_invocation_count);
-        EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
-        equivalence_test(tree_move, stubs);
-    }
-
-    TEST_F(red_black_tree_test, range_constructor_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
-        stub_tree_type tree(stubs.cbegin(), stubs.cend());
-        equivalence_test(tree, stubs);
-    }
-
-    TEST_F(red_black_tree_test, swap_test) {
-        std::vector<constructor_stub> stubs1 = get_random_number_vector(SMALL_LIMIT);
-        stub_tree_type tree1(stubs1.cbegin(), stubs1.cend());
-        stub_tree_type tree_copy1(tree1);
-        std::vector<constructor_stub> stubs2 = get_random_number_vector(SMALL_LIMIT);
-        stub_tree_type tree2(stubs2.cbegin(), stubs2.cend());
-        stub_tree_type tree_copy2(tree2);
-        std::swap(tree1, tree2);
-        equivalence_test(tree2, stubs1);
-        equivalence_test(tree1, stubs2);
-    }
 
     std::size_t compute_max_height(std::size_t height) {
         return (std::size_t) std::floor(pow((double) height, 1 / 2));
     }
 
     void join_test(std::size_t left_size, std::size_t right_size, bool has_middle = true) {
-        std::vector<constructor_stub> negative_stubs = get_random_number_vector(left_size, -LIMIT, 1);
+        tracking_allocator<stub_node_type> allocator;
+        std::vector<constructor_stub> negative_stubs = get_random_stub_vector(left_size, -LIMIT, 1);
         stub_tree_type left(negative_stubs.begin(), negative_stubs.end());
-        std::vector<constructor_stub> positive_stubs = get_random_number_vector(right_size, 1, LIMIT);
+        std::vector<constructor_stub> positive_stubs = get_random_stub_vector(right_size, 1, LIMIT);
         stub_tree_type right(positive_stubs.begin(), positive_stubs.end());
 
         stub_node_type* left_root = nullptr;
-        if (left.get_sentinel() -> left_child) {
-            left_root = left.get_sentinel() -> left_child -> deep_clone();
+        if (left.__get_sentinel() -> left_child) {
+            left_root = left.__get_sentinel() -> left_child -> deep_clone(allocator);
         }
 
         stub_node_type* right_root = nullptr;
-        if (right.get_sentinel() -> left_child) {
-            right_root = right.get_sentinel() -> left_child -> deep_clone();
+        if (right.__get_sentinel() -> left_child) {
+            right_root = right.__get_sentinel() -> left_child -> deep_clone(allocator);
         }
 
         int default_constructor_invocation_count = constructor_stub::default_constructor_invocation_count;
@@ -157,7 +73,7 @@ namespace {
 
         stub_ptr_type result;
         if (has_middle) {
-            result = stub_tree_type::join(stub_ptr_type(left_root), stub_ptr_type(new stub_node_type(0)), stub_ptr_type(right_root));
+            result = stub_tree_type::join(stub_ptr_type(left_root), stub_ptr_type(stub_node_type::construct(allocator, 0)), stub_ptr_type(right_root));
         } else {
             result = stub_tree_type::join(stub_ptr_type(left_root), stub_ptr_type(right_root));
         }
@@ -165,8 +81,8 @@ namespace {
         EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
         EXPECT_EQ(default_constructor_invocation_count, constructor_stub::default_constructor_invocation_count);
         EXPECT_EQ(result -> parent, nullptr);
-        EXPECT_TRUE(stub_tree_type::has_no_consecutive_red_nodes_helper(result.get()));
-        EXPECT_TRUE(stub_tree_type::are_all_black_paths_equally_long_helper(result.get()) != -1);
+        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(result.get()));
+        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(result.get()) != -1);
 
         std::sort(negative_stubs.begin(), negative_stubs.end(), constructor_stub_comparator());
         std::sort(positive_stubs.begin(), positive_stubs.end(), constructor_stub_comparator());
@@ -184,6 +100,7 @@ namespace {
             EXPECT_EQ((*it1).id, curr -> value.id);
             curr = curr -> next();
         }
+        result -> deep_destroy(allocator);
     }
 
     TEST_F(red_black_tree_test, join_missing_left_basic_test) {
@@ -291,12 +208,13 @@ namespace {
     }
 
     template<typename Resolver>
-    void split_test(const stub_tree_type& tree, constructor_stub& divider, Resolver resolver, bool has_conflict, bool keep_divider = false) {
+    void split_test(stub_tree_type& tree, constructor_stub& divider, Resolver resolver, bool has_conflict, bool keep_divider = false) {
+        tracking_allocator<stub_node_type> allocator;
         // The constructor stub in this node has smaller id
-        stub_node_type* node = new stub_node_type(divider);
+        stub_node_type* node = stub_node_type::construct(allocator, divider);
         stub_node_type* root = nullptr;
-        if (tree.get_sentinel() -> left_child) {
-            root = tree.get_sentinel() -> left_child -> deep_clone();
+        if (tree.__get_sentinel() -> left_child) {
+            root = tree.__get_sentinel() -> left_child -> deep_clone(allocator);
         }
         
         int default_constructor_invocation_count = constructor_stub::default_constructor_invocation_count;
@@ -309,10 +227,10 @@ namespace {
         EXPECT_EQ(default_constructor_invocation_count, constructor_stub::default_constructor_invocation_count);
         
         EXPECT_EQ(split_root -> parent, nullptr);
-        EXPECT_TRUE(stub_tree_type::has_no_consecutive_red_nodes_helper(split_root -> left_child.get()));
-        EXPECT_TRUE(stub_tree_type::are_all_black_paths_equally_long_helper(split_root -> left_child.get()) != -1);
-        EXPECT_TRUE(stub_tree_type::has_no_consecutive_red_nodes_helper(split_root -> right_child.get()));
-        EXPECT_TRUE(stub_tree_type::are_all_black_paths_equally_long_helper(split_root -> right_child.get()) != -1);
+        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(split_root -> left_child.get()));
+        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(split_root -> left_child.get()) != -1);
+        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(split_root -> right_child.get()));
+        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(split_root -> right_child.get()) != -1);
 
         if (has_conflict) {
             EXPECT_EQ(split_root.get() == node, keep_divider);
@@ -329,6 +247,7 @@ namespace {
             EXPECT_EQ((*it1).id, curr -> value.id);
             curr = curr -> next();
         }
+        split_root -> deep_destroy(allocator);
     }
 
     template<typename Resolver>
@@ -365,7 +284,7 @@ namespace {
     }
 
     TEST_F(red_black_tree_test, split_balanced_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
+        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
         int mid_index = copy_stubs.size() / 2;
@@ -374,7 +293,7 @@ namespace {
     }
 
     TEST_F(red_black_tree_test, split_conflict_balanced_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
+        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
         int mid_index = copy_stubs.size() / 2;
@@ -383,7 +302,7 @@ namespace {
     }
     
     TEST_F(red_black_tree_test, split_left_empty_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
+        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
         constructor_stub stub(copy_stubs[0].id - 1);
@@ -391,7 +310,7 @@ namespace {
     }
 
     TEST_F(red_black_tree_test, split_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(11);
+        std::vector<constructor_stub> stubs = get_random_stub_vector(11);
         stub_tree_type tree(stubs.begin(), stubs.end());
 
         std::vector<constructor_stub> copy_stubs(stubs);
@@ -405,7 +324,7 @@ namespace {
     }
 
     TEST_F(red_black_tree_test, split_conflict_intermediate_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(SMALL_LIMIT);
+        std::vector<constructor_stub> stubs = get_random_stub_vector(SMALL_LIMIT);
         stub_tree_type tree(stubs.begin(), stubs.end());
 
         std::vector<constructor_stub> copy_stubs(stubs);
@@ -417,7 +336,7 @@ namespace {
     }
 
     TEST_F(red_black_tree_test, split_stress_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(MEDIUM_LIMIT);
+        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
         stub_tree_type tree(stubs.begin(), stubs.end());
         std::vector<constructor_stub> copy_stubs(stubs);
         std::sort(copy_stubs.begin(), copy_stubs.end(), constructor_stub_comparator());
@@ -431,7 +350,7 @@ namespace {
     }
 
     TEST_F(red_black_tree_test, split_conflict_stress_test) {
-        std::vector<constructor_stub> stubs = get_random_number_vector(MEDIUM_LIMIT);
+        std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
         stub_tree_type tree(stubs.begin(), stubs.end());
 
         std::vector<constructor_stub> copy_stubs(stubs);
@@ -443,8 +362,7 @@ namespace {
         }
     }
 
-    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree_bulk_operation_complexity, tree_bulk_operation_complexity_test,
-        stub_tree_type);
-    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree_parallel_comparison, tree_parallel_comparison_test,
-        stub_tree_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, tree_common_test, stub_tree_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, tree_bulk_operation_complexity_test, stub_tree_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, tree_parallel_comparison_test, stub_tree_type);
 }

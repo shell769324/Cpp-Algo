@@ -1,7 +1,6 @@
 #pragma once
 #include <functional>
 #include <concepts>
-#include <iostream>
 #include "binary_tree_common.h"
 #include "binary_tree_base.h"
 #include "binary_tree_node.h"
@@ -20,48 +19,51 @@ namespace algo {
 template <typename T>
 class avl_node : public binary_tree_node_base<T, avl_node<T> > {
 public:
-
     using parent_type = binary_tree_node_base<T, avl_node<T> >;
 
     // The number of nodes along the longest path to its leafy descendant, including itself
     // unsigned char is more than enough because avl tree is balanced
     unsigned char height;
-
-    /**
-     * @brief Create a new avl node
-     */
-    avl_node() requires std::default_initializable<T> : height(1) { }
     
-    /**
-     * @brief Construct a new avl node object
-     * 
-     * @param value used to copy construct the value of this node
-     */
-    template <typename... Args>
-    requires (!singleton_pack_decayable_to<avl_node, Args...>)
-    avl_node(Args&&... args) : parent_type(std::forward<Args>(args)...), height(1) { }
-    
+    avl_node() = delete;
     // There should never be a scenario where we need to duplicate a node
     // We should always operate on pointers to node
     avl_node(const avl_node& other) = delete;
     avl_node(avl_node&& other) = delete;
 
     /**
-     * @brief Destroy the avl node object
+     * @brief Never use the destructor since it will destroy the value
      */
-    ~avl_node() override { }
+    ~avl_node() = delete;
 
-    /**
-     * @brief Create a shallow copy of this node
-     * 
-     * Parent or child pointers are not moved
-     * 
-     * @return avl_node* a shallow copy of this node
-     */
-    avl_node* clone() const {
-        avl_node* node_clone = new avl_node(this -> value);
-        node_clone -> height = height;
-        return node_clone;
+    template <typename Allocator, typename... Args>
+    requires std::same_as<avl_node, typename Allocator::value_type>
+    static avl_node* construct(Allocator& allocator, Args&&... args) {
+        avl_node* node = parent_type::construct(allocator, std::forward<Args>(args)...);
+        node -> height = 1;
+        return node;
+    }
+
+    template <typename Allocator>
+    requires std::same_as<avl_node, typename Allocator::value_type>
+    static avl_node* construct_sentinel(Allocator& allocator) {
+        avl_node* node = parent_type::construct_sentinel(allocator);
+        node -> height = 1;
+        return node;
+    }
+
+    template <typename Allocator>
+    requires std::same_as<avl_node, typename Allocator::value_type>
+    avl_node* clone(Allocator& allocator) const {
+        avl_node* node = parent_type::clone(allocator);
+        node -> height = height;
+        return node;
+    }
+
+    template <typename Allocator>
+    requires std::same_as<avl_node, typename Allocator::value_type>
+    void destroy(Allocator& allocator) {
+        parent_type::destroy(allocator);
     }
 
     void fill(avl_node* other) const requires std::is_copy_constructible_v<T> {
@@ -172,16 +174,6 @@ public:
         }
         return rotate_left();
     }
-
-    void printPair() {
-        std::cout << this -> value.first.id << ":" << this -> value.second.id << ":" << (int) height << std::endl;
-        if (this -> left_child) {
-            this -> left_child -> printPair();
-        }
-        if (this -> right_child) {
-            this -> right_child -> printPair();
-        }
-    }
 };
 
 
@@ -191,68 +183,98 @@ public:
  * @tparam K the type of the key
  * @tparam V the type of the value
  * @tparam KeyOf key extractor function or functor
- * @tparam Comparator key comparactor function or functor
+ * @tparam Compare key comparactor function or functor
+ * @tparam Allocator the allocator that allocates and deallocates raw memory
  */
-template <typename K, typename V, typename KeyOf, typename Comparator = std::less<K> >
-    requires binary_tree_definable<K, V, KeyOf, Comparator>
-class avl_tree: public binary_tree_base <K, V, KeyOf, avl_node<V>, avl_tree<K, V, KeyOf, Comparator>, Comparator> {
+template <typename K, typename V, typename KeyOf, typename Compare = std::less<K>, typename Allocator = std::allocator<V> >
+    requires binary_tree_definable<K, V, KeyOf, Compare, Allocator>
+class avl_tree: public binary_tree_base<K, V, KeyOf, avl_node<V>, avl_tree<K, V, KeyOf, Compare, Allocator>, Compare, Allocator> {
 
 public:
-    using base_type = binary_tree_base<K, V, KeyOf, avl_node<V>, avl_tree<K, V, KeyOf, Comparator>, Comparator>;
+    using base_type = binary_tree_base<K, V, KeyOf, avl_node<V>, avl_tree<K, V, KeyOf, Compare, Allocator>, Compare, Allocator>;
     
     using key_type = base_type::key_type;
     using value_type = base_type::value_type;
+    using size_type = base_type::size_type;
+    using difference_type = base_type::difference_type;
+    using key_compare = base_type::key_compare;
+    using allocator_type = base_type::allocator_type;
     using reference = base_type::reference;
     using const_reference = base_type::const_reference;
+    using pointer = base_type::pointer;
+    using const_pointer = base_type::const_pointer;
     using iterator = base_type::iterator;
     using const_iterator = base_type::const_iterator;
     using reverse_iterator = base_type::reverse_iterator;
     using const_reverse_iterator = base_type::const_reverse_iterator;
     using node_type = base_type::node_type;
-    using smart_ptr_type = base_type::smart_ptr_type;
+    using unique_ptr_type = base_type::unique_ptr_type;
 
     using base_type::key_of;
     using base_type::comp;
+    using base_type::node_allocator;
     using base_type::EXISTS;
     using base_type::IS_LEFT_CHILD;
     using base_type::get_insertion_parent;
-    using base_type::is_inorder;
-    using base_type::is_size_correct;
-    using base_type::is_parent_child_link_mutual;
-    using base_type::max_leq;
-    using base_type::min_geq;
+    using base_type::__is_inorder;
+    using base_type::__is_size_correct;
+    using base_type::upper_bound;
+    using base_type::lower_bound;
     using base_type::union_of;
     using base_type::intersection_of;
     using base_type::difference_of;
 
 private:
-    smart_ptr_type sentinel;
+    node_type* sentinel;
     std::size_t element_count;
 
 public:
-    constexpr static const unsigned char HAS_CONFLICT = 0xff;
-
-public:
     /**
-     * @brief Construct an empty avl tree with default comparator
+     * @brief Construct a default empty avl tree
      */
-    avl_tree() : base_type(), sentinel(std::make_unique<node_type>()), element_count(0) { }
+    avl_tree() 
+        : sentinel(node_type::construct_sentinel(node_allocator)), 
+          element_count(0) { }
 
     /**
-     * @brief Construct an empty avl tree with a given comparator
+     * @brief Construct an empty avl tree with a given comparator and allocator
      * 
      * @param comp the key comparator used by the tree
-     *             will be copy constructed
+     * @param allocator the allocator to construct/destroy elements
      */
-    avl_tree(const Comparator& comp) : base_type(comp), sentinel(std::make_unique<node_type>()), element_count(0) { }
+    explicit avl_tree(const Compare& comp, const allocator_type& allocator) 
+        : base_type(comp, allocator), 
+          sentinel(node_type::construct_sentinel(node_allocator)), 
+          element_count(0) { }
 
     /**
-     * @brief Construct an empty avl tree with a given comparator
+     * @brief Construct a new avl tree from range
      * 
-     * @param comp the key comparator used by the tree
-     *             will be move constructed
+     * @tparam InputIt the type of the iterator
+     * @param first the beginning of the range
+     * @param last the end of the range
      */
-    avl_tree(Comparator&& comp) : base_type(std::move(comp)), sentinel(std::make_unique<node_type>()), element_count(0) { }
+    template<std::input_iterator InputIt>
+    avl_tree(InputIt first, InputIt last) : avl_tree() {
+        insert(first, last);
+    }
+    
+    /**
+     * @brief Construct a new avl tree from range
+     * 
+     * @tparam InputIt the type of the iterator
+     * @param first the beginning of the range
+     * @param last the end of the range
+     * @param comp the key comparator used by the tree
+     * @param allocator the allocator to construct/destroy elements
+     */
+    template<std::input_iterator InputIt>
+    avl_tree(InputIt first, InputIt last,
+             const Compare& comp, 
+             const Allocator& allocator)
+        : avl_tree(comp, allocator) {
+        insert(first, last);
+    }
 
     /**
      * @brief Construct a copy of another avl tree
@@ -261,18 +283,57 @@ public:
      * 
      * @param other the tree to copy from
      */
-    avl_tree(const avl_tree& other) : base_type(other),
-        sentinel(other.sentinel->deep_clone()), element_count(other.element_count) { }
+    avl_tree(const avl_tree& other)
+        : base_type(other),
+          sentinel(node_type::construct_sentinel(node_allocator)),
+          element_count(other.element_count) {
+        if (other.sentinel -> left_child) {
+            sentinel -> link_left_child(other.sentinel-> left_child -> deep_clone(node_allocator));
+        }
+    }
 
     /**
-     * @brief Construct a copy of another avl tree
+     * @brief Construct a copy of another avl tree with an allocator
+     * 
+     * @param other the tree to copy from
+     * @param allocator the allocator to construct/destroy elements
+     */
+    avl_tree(const avl_tree& other, const Allocator& allocator) 
+        : base_type(other, allocator),
+          sentinel(node_type::construct_sentinel(node_allocator)),
+          element_count(other.element_count) {
+        // If the other tree is not empty, the other tree's sentinel must have a nonnull left child
+        if (other.sentinel -> left_child) {
+            sentinel -> link_left_child(other.sentinel-> left_child -> deep_clone(node_allocator));
+        }
+    }
+
+    /**
+     * @brief Construct a copy of another avl tree by move
      * 
      * Move constructor
      * 
      * @param other the tree to move from
      */
-    avl_tree(avl_tree&& other) : base_type(std::move(other)),
-        sentinel(std::move(other.sentinel)), element_count(other.element_count) {
+    avl_tree(avl_tree&& other) 
+        : base_type(std::move(other)), 
+          sentinel(other.sentinel), 
+          element_count(other.element_count) {
+        other.sentinel = nullptr;
+        other.element_count = 0;
+    }
+
+    /**
+     * @brief Construct a copy of another avl tree with an allocator by move
+     * 
+     * @param other the tree to move from
+     * @param allocator the allocator to construct/destroy eleents
+     */
+    avl_tree(avl_tree&& other, const Allocator& allocator) 
+        : base_type(std::move(other), allocator), 
+          sentinel(other.sentinel), 
+          element_count(other.element_count) {
+        other.sentinel = nullptr;
         other.element_count = 0;
     }
 
@@ -303,22 +364,27 @@ public:
         return *this;
     }
 
+    ~avl_tree() noexcept override {
+        // If this avl tree was moved, its sentinel is null
+        if (sentinel == nullptr) {
+            return;
+        }
+        // Destroy and deallocate all nodes
+        clear();
+        base_type::node_alloc_traits::deallocate(node_allocator, sentinel, 1);
+    }
+
     /**
-     * @brief Construct a new avl tree from range
-     * 
-     * @tparam InputIt the type of the iterator
-     * @param first the beginning of the range
-     * @param last the end of the range
+     * @brief Get a copy of the associated allocator
      */
-    template<std::input_iterator InputIt>
-    avl_tree(InputIt first, InputIt last) : avl_tree() {
-        insert(first, last);
+    allocator_type get_allocator() const noexcept {
+        return allocator_type(node_allocator);
     }
 
     /**
      * @brief Test if a tree is empty
      */
-    bool is_empty() const noexcept {
+    bool empty() const noexcept {
         return element_count == 0;
     }
 
@@ -336,7 +402,7 @@ public:
         return iterator(sentinel -> get_leftmost_descendant());
     }
 
-    /**
+    /**m
      * @brief Get a constant iterator to the smallest element
      */
     const_iterator begin() const noexcept {
@@ -354,21 +420,21 @@ public:
      * @brief Get an iterator to one past the greatest element
      */
     iterator end() noexcept {
-        return iterator(sentinel.get());
+        return iterator(sentinel);
     }
 
     /**
      * @brief Get a constant iterator to one past the greatest element
      */
     const_iterator end() const noexcept {
-        return const_iterator(sentinel.get());
+        return const_iterator(sentinel);
     }
 
     /**
      * @brief Get a constant iterator to one past the greatest element
      */
     const_iterator cend() const noexcept {
-        return const_iterator(sentinel.get());
+        return const_iterator(sentinel);
     }
 
     /**
@@ -423,8 +489,10 @@ public:
      * @brief Remove all elements in this tree
      */
     void clear() noexcept {
-        sentinel -> left_child.reset();
-        element_count = 0;
+        if (sentinel -> left_child) {
+            sentinel -> left_child.release() -> deep_destroy(node_allocator);
+            element_count = 0;
+        }
     }
 
     /**
@@ -454,29 +522,29 @@ public:
     }
 
     /**
-     * @brief Get the iterator to the greatest element less than or equal to
+     * @brief Get the iterator to the smallest element greater than
      *        a given key
      * 
      * @param key the inclusive upper bound
      * @return an iterator to such element if it exists,
      *         the end iterator otherwise
      */
-    iterator max_leq(const key_type& key) {
-        return iterator(std::as_const(*this).max_leq(key));
+    iterator upper_bound(const key_type& key) {
+        return iterator(std::as_const(*this).upper_bound(key));
     }
 
     /**
-     * @brief Get the iterator to the greatest element less than or equal to
+     * @brief Get the iterator to the smallest element greater than
      *        a given key
      * 
      * @param key the inclusive upper bound
      * @return a const iterator to such element if it exists,
      *         the end iterator otherwise
      */
-    const_iterator max_leq(const key_type& key) const {
-        node_type* res = max_leq(sentinel -> left_child.get(), key);
+    const_iterator upper_bound(const key_type& key) const {
+        node_type* res = upper_bound(sentinel -> left_child.get(), key);
         if (!res) {
-            res = sentinel.get();
+            res = sentinel;
         }
         return const_iterator(res);
     }
@@ -489,8 +557,8 @@ public:
      * @return an iterator to such element if it exists,
      *         the end iterator otherwise
      */
-    iterator min_geq(const key_type& key) {
-        return iterator(std::as_const(*this).min_geq(key));
+    iterator lower_bound(const key_type& key) {
+        return iterator(std::as_const(*this).lower_bound(key));
     }
 
     /**
@@ -501,10 +569,10 @@ public:
      * @return a const iterator to such element if it exists,
      *         the end iterator otherwise
      */
-    const_iterator min_geq(const key_type& key) const {
-        node_type* res = min_geq(sentinel -> left_child.get(), key);
+    const_iterator lower_bound(const key_type& key) const {
+        node_type* res = lower_bound(sentinel -> left_child.get(), key);
         if (!res) {
-            res = sentinel.get();
+            res = sentinel;
         }
         return const_iterator(res);
     }
@@ -512,7 +580,7 @@ public:
 private:
     std::pair<node_type*, char> get_insertion_parent(const key_type& key) {
         if (!sentinel -> left_child) {
-            return std::make_pair(sentinel.get(), IS_LEFT_CHILD);
+            return std::make_pair(sentinel, IS_LEFT_CHILD);
         }
         return get_insertion_parent(sentinel -> left_child.get(), key);
     }
@@ -551,7 +619,7 @@ private:
     }
 
     void adjust_after_insertion(node_type* new_node) {
-        adjust_after_insertion(new_node, sentinel.get());
+        adjust_after_insertion(new_node, sentinel);
     }
 
 public:
@@ -584,7 +652,7 @@ public:
         if (res.second & EXISTS) {
             return std::make_pair(iterator(res.first), false);
         }
-        node_type* new_node = new node_type(value);
+        node_type* new_node = node_type::construct(node_allocator, value);
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
         // Populate ancestors' heights and rebalance
         adjust_after_insertion(new_node);
@@ -607,7 +675,7 @@ public:
         if (res.second & EXISTS) {
             return std::make_pair(iterator(res.first), false);
         }
-        node_type* new_node = new node_type(std::move(value));
+        node_type* new_node = node_type::construct(node_allocator, std::move(value));
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
         // Populate ancestors' heights and rebalance
         adjust_after_insertion(new_node);
@@ -630,10 +698,10 @@ public:
      */
     template<typename... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
-        node_type* new_node = new node_type(std::forward<Args>(args)...);
+        node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
         std::pair<node_type*, char> res = get_insertion_parent(key_of(new_node -> value));
         if (res.second & EXISTS) {
-            delete new_node;
+            new_node -> destroy(node_allocator);
             return std::make_pair(iterator(res.first), false);
         }
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
@@ -663,7 +731,7 @@ public:
         if (res.second & EXISTS) {
             return std::make_pair(iterator(res.first), false);
         }
-        node_type* new_node = new node_type(std::forward<Args>(args)...);
+        node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
         res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
 
         // Populate ancestors' heights and rebalance
@@ -816,8 +884,8 @@ public:
      * @return the iterator following the removed element
      */
     iterator erase(iterator pos) {
-        iterator res = extract(pos, sentinel.get());
-        delete static_cast<node_type*>(pos.node);
+        iterator res = extract(pos, sentinel);
+        (static_cast<node_type*>(pos.node)) -> destroy(node_allocator);
         --element_count;
         return res;
     }
@@ -853,11 +921,32 @@ public:
      * 
      * @param other the other avl tree to swap from
      */
-    void swap(avl_tree& other) noexcept {
-        std::swap(key_of, other.key_of);
-        std::swap(comp, other.comp);
+    void swap(avl_tree& other) noexcept(std::is_nothrow_swappable_v<Compare>) {
+        std::swap(static_cast<base_type&>(*this), static_cast<base_type&>(other));
         std::swap(sentinel, other.sentinel);
         std::swap(element_count, other.element_count);
+    }
+
+    /**
+     * @brief Check equality of two avl trees
+     * 
+     * @param tree1 the first avl tree
+     * @param tree2 the second avl tree
+     * @return true if their contents are equal, false otherwise
+     */
+    friend bool operator==(const avl_tree& tree1, const avl_tree& tree2) requires equality_comparable<value_type> {
+        return container_equals(tree1, tree2);
+    }
+
+    /**
+     * @brief Compare two avl trees
+     * 
+     * @param tree1 the first avl tree
+     * @param tree2 the second avl tree
+     * @return a strong ordering comparison result
+     */
+    friend std::strong_ordering operator<=>(const avl_tree& tree1, const avl_tree& tree2) requires less_comparable<value_type> {
+        return container_three_way_comparison(tree1, tree2);
     }
 
     /**
@@ -868,17 +957,21 @@ public:
     }
 
     /**
-     * @brief Get the key comparator function or functor
+     * @brief Get the key compare function or functor
      */
-    Comparator get_comparator() const noexcept {
+    Compare key_comp() const noexcept {
         return comp;
     }
 
     /*
      * Testing purpose only
      */
-    const avl_node<V>* get_sentinel() const noexcept {
-        return sentinel.get();
+    const avl_node<V>* __get_sentinel() const noexcept {
+        return sentinel;
+    }
+
+    base_type::node_allocator_type& __get_node_allocator() noexcept {
+        return node_allocator;
     }
 
 private:
@@ -893,7 +986,7 @@ private:
      *            Can be null
      * @return the result of the join
      */
-    static smart_ptr_type join_right(smart_ptr_type dest, smart_ptr_type src) {
+    static unique_ptr_type join_right(unique_ptr_type dest, unique_ptr_type src) {
         if (!src) {
             return dest;
         }
@@ -911,7 +1004,7 @@ private:
         node_type* raw_dest = dest.release();
         extract(middle_node, nullptr);
         node_type* new_dest = raw_dest -> parent ? raw_dest -> parent : raw_dest;
-        return join_right(smart_ptr_type(new_dest), std::move(src), smart_ptr_type(middle_node));
+        return join_right(unique_ptr_type(new_dest), std::move(src), unique_ptr_type(middle_node));
     }
 
     /**
@@ -926,7 +1019,7 @@ private:
      * @param middle_node a unique ptr to the middle node. Must be nonnull
      * @return the result of the join
      */
-    static smart_ptr_type join_right(smart_ptr_type dest, smart_ptr_type src, smart_ptr_type middle_node) {
+    static unique_ptr_type join_right(unique_ptr_type dest, unique_ptr_type src, unique_ptr_type middle_node) {
         unsigned char max_balancing_height = src ? src -> height + 1 : 1;
         node_type* curr = dest.get();
         node_type* parent = nullptr;
@@ -945,7 +1038,7 @@ private:
         middle_ptr -> safe_link_right_child(std::move(src));
         middle_ptr -> update_height();
         adjust_after_insertion(middle_ptr, nullptr);
-        return smart_ptr_type(raw_dest -> parent ? raw_dest -> parent : raw_dest);
+        return unique_ptr_type(raw_dest -> parent ? raw_dest -> parent : raw_dest);
     }
 
     /**
@@ -959,7 +1052,7 @@ private:
      *            Can be null
      * @return the result of the join
      */
-    static smart_ptr_type join_left(smart_ptr_type dest, smart_ptr_type src) {
+    static unique_ptr_type join_left(unique_ptr_type dest, unique_ptr_type src) {
         if (!src) {
             return dest;
         }
@@ -977,7 +1070,7 @@ private:
         node_type* raw_dest = dest.release();
         extract(middle_node, nullptr);
         node_type* new_dest = raw_dest -> parent ? raw_dest -> parent : raw_dest;
-        return join_left(smart_ptr_type(new_dest), std::move(src), smart_ptr_type(middle_node));
+        return join_left(unique_ptr_type(new_dest), std::move(src), unique_ptr_type(middle_node));
     }
 
     /**
@@ -992,7 +1085,7 @@ private:
      * @param middle_node a unique ptr to the middle node. Must be nonnull
      * @return the result of the join
      */
-    static smart_ptr_type join_left(smart_ptr_type dest, smart_ptr_type src, smart_ptr_type middle_node) {
+    static unique_ptr_type join_left(unique_ptr_type dest, unique_ptr_type src, unique_ptr_type middle_node) {
         unsigned char max_balancing_height = src ? src -> height + 1 : 1;
         node_type* curr = dest.get();
         node_type* parent = nullptr;
@@ -1011,7 +1104,7 @@ private:
         middle_ptr -> update_height();
         
         adjust_after_insertion(middle_ptr, nullptr);
-        return smart_ptr_type(raw_dest -> parent ? raw_dest -> parent : raw_dest);
+        return unique_ptr_type(raw_dest -> parent ? raw_dest -> parent : raw_dest);
     }
 
 public:
@@ -1025,7 +1118,7 @@ public:
      * @param middle a leafy node without parent that has a value between the left and right true
      * @return node_type* the joined node
      */
-    static smart_ptr_type join(smart_ptr_type left, smart_ptr_type middle, smart_ptr_type right) {
+    static unique_ptr_type join(unique_ptr_type left, unique_ptr_type middle, unique_ptr_type right) {
         if (!left && !right) {
             middle -> height = 1;
             return middle;
@@ -1037,7 +1130,7 @@ public:
         return join_left(std::move(right), std::move(left), std::move(middle));
     }
 
-    static smart_ptr_type join(smart_ptr_type left, smart_ptr_type right) {
+    static unique_ptr_type join(unique_ptr_type left, unique_ptr_type right) {
         if (!left && !right) {
             return nullptr;
         }
@@ -1052,12 +1145,12 @@ private:
      * @brief A helper for splitting a tree by a key of a given node
      */
     template<typename Resolver>
-    std::pair<smart_ptr_type, bool> split_helper(smart_ptr_type root, smart_ptr_type divider, const key_type& divider_key, Resolver& resolver) const {
+    std::pair<unique_ptr_type, bool> split_helper(unique_ptr_type root, unique_ptr_type divider, const key_type& divider_key, Resolver& resolver) {
         if (!root) {
             return std::make_pair(std::move(divider), false);
         }
         const key_type& root_key = key_of(root -> value);
-        int key_comp_res = this -> key_comp(divider_key, root_key);
+        int key_comp_res = this -> key_comp_wrapper(divider_key, root_key);
         if (key_comp_res == 0) {
             if (resolver(root -> value, divider -> value)) {
                 if (root -> left_child) {
@@ -1066,16 +1159,18 @@ private:
                 if (root -> right_child) {
                     root -> right_child -> parent = nullptr;
                 }
+                divider.release() -> destroy(node_allocator);
                 return std::make_pair(std::move(root), true);
             }
             divider -> left_child.reset(root -> orphan_left_child());
             divider -> right_child.reset(root -> orphan_right_child());
+            root.release() -> destroy(node_allocator);
             return std::make_pair(std::move(divider), true);
         }
         root -> height = 1;
-        smart_ptr_type root_left_child(root -> orphan_left_child());
-        smart_ptr_type root_right_child(root -> orphan_right_child());
-        std::pair<smart_ptr_type, bool> split_result;
+        unique_ptr_type root_left_child(root -> orphan_left_child());
+        unique_ptr_type root_right_child(root -> orphan_right_child());
+        std::pair<unique_ptr_type, bool> split_result;
         if (key_comp_res < 0) {
             split_result = split_helper(std::move(root_left_child), std::move(divider), divider_key, resolver);
             split_result.first -> right_child = join(std::move(split_result.first -> right_child), std::move(root), std::move(root_right_child));
@@ -1102,8 +1197,8 @@ public:
      *         without having to resort to tuple, which is slow. The boolean is true if a collision occurs. False otherwise.
      */
     template<typename Resolver=chooser<value_type> >
-    std::pair<smart_ptr_type, bool> split(smart_ptr_type root, smart_ptr_type divider, Resolver resolver = Resolver()) 
-        const requires is_resolver<value_type, Resolver> {
+    std::pair<unique_ptr_type, bool> split(unique_ptr_type root, unique_ptr_type divider, Resolver resolver = Resolver()) 
+        requires is_resolver<value_type, Resolver> {
         return split_helper(std::move(root), std::move(divider), key_of(divider -> value), resolver);
     }
 
@@ -1111,20 +1206,22 @@ public:
     friend avl_tree union_of_helper(avl_tree tree1, avl_tree tree2,
         std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) 
         requires is_resolver<value_type, Resolver> {
-        if (tree1.is_empty()) {
+        if (tree1.empty()) {
             return tree2;
         }
-        if (tree2.is_empty()) {
+        if (tree2.empty()) {
             return tree1;
         }
         
         node_type* root1 = tree1.sentinel -> orphan_left_child();
+        tree1.element_count = 0;
         node_type* root2 = tree2.sentinel -> orphan_left_child();
-        smart_ptr_type res;
+        tree2.element_count = 0;
+        unique_ptr_type res;
         if (executor.has_value()) {
-            res = tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get(), resolver);
+            res = tree1.union_of(unique_ptr_type(root1), unique_ptr_type(root2), executor.value().get(), resolver);
         } else {
-            res = tree1.union_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver);
+            res = tree1.union_of(unique_ptr_type(root1), unique_ptr_type(root2), resolver);
         }
         tree1.sentinel -> link_left_child(std::move(res));
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
@@ -1159,21 +1256,23 @@ public:
     friend avl_tree intersection_of_helper(avl_tree tree1, avl_tree tree2,
         std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) 
         requires is_resolver<value_type, Resolver> {
-        if (tree1.is_empty()) {
+        if (tree1.empty()) {
             return tree1;
         }
-        if (tree2.is_empty()) {
+        if (tree2.empty()) {
             return tree2;
         }
         
         node_type* root1 = tree1.sentinel -> orphan_left_child();
+        tree1.element_count = 0;
         node_type* root2 = tree2.sentinel -> orphan_left_child();
-        smart_ptr_type res;
+        tree2.element_count = 0;
+        unique_ptr_type res;
 
         if (executor.has_value()) {
-            res = tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get(), resolver);
+            res = tree1.intersection_of(unique_ptr_type(root1), unique_ptr_type(root2), executor.value().get(), resolver);
         } else {
-            res = tree1.intersection_of(smart_ptr_type(root1), smart_ptr_type(root2), resolver);
+            res = tree1.intersection_of(unique_ptr_type(root1), unique_ptr_type(root2), resolver);
         }
         tree1.sentinel -> safe_link_left_child(std::move(res));
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
@@ -1206,18 +1305,20 @@ public:
 
     friend avl_tree difference_of_helper(avl_tree tree1, avl_tree tree2,
         std::optional<std::reference_wrapper<thread_pool_executor>> executor) {
-        if (tree1.is_empty() || tree2.is_empty()) {
+        if (tree1.empty() || tree2.empty()) {
             return tree1;
         }
         
         node_type* root1 = tree1.sentinel -> orphan_left_child();
+        tree1.element_count = 0;
         node_type* root2 = tree2.sentinel -> orphan_left_child();
-        smart_ptr_type res;
+        tree2.element_count = 0;
+        unique_ptr_type res;
 
         if (executor.has_value()) {
-            res = tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2), executor.value().get());
+            res = tree1.difference_of(unique_ptr_type(root1), unique_ptr_type(root2), executor.value().get());
         } else {
-            res = tree1.difference_of(smart_ptr_type(root1), smart_ptr_type(root2));
+            res = tree1.difference_of(unique_ptr_type(root1), unique_ptr_type(root2));
         }
         tree1.sentinel -> safe_link_left_child(std::move(res));
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
@@ -1244,45 +1345,38 @@ public:
 private:
     constexpr static unsigned ERROR = 0xffffffff;
 
-    unsigned is_height_correct_helper(node_type* node) const noexcept {
+    unsigned __is_height_correct_helper(node_type* node) const noexcept {
         if (!node) {
             return 0;
         }
-        unsigned actual_left_height = is_height_correct_helper(node -> left_child.get());
+        unsigned actual_left_height = __is_height_correct_helper(node -> left_child.get());
         if (actual_left_height == ERROR) {
             return ERROR;
         }
-        unsigned actual_right_height = is_height_correct_helper(node -> right_child.get());
+        unsigned actual_right_height = __is_height_correct_helper(node -> right_child.get());
         if (actual_right_height == ERROR) {
             return ERROR;
         }
         unsigned actual_height = 1 + std::max(actual_left_height, actual_right_height);
         if (actual_height != node -> height) {
-            std::cout << "is_height_correct failure" << std::endl;
-            std::cout << "Value of: node -> height" << std::endl;
-            std::cout << "  Actual: " << (int) node -> height << std::endl;
-            std::cout << "Expected: " << actual_height << std::endl;
             return ERROR;
         }
         // If balance factor is more than 1, tree is not balanced
         if (std::max(actual_left_height, actual_right_height) -
             std::min(actual_left_height, actual_right_height) > 1) {
-            std::cout << "is_height_correct failure" << std::endl;
-            std::cout << " left height: " << actual_left_height << std::endl;
-            std::cout << "right height: " << actual_right_height << std::endl;
             return ERROR;
         }
         return actual_height;
     }
 
-    bool is_height_correct(node_type* node) const noexcept {
-        return is_height_correct_helper(node) != ERROR;
+    bool __is_height_correct(node_type* node) const noexcept {
+        return __is_height_correct_helper(node) != ERROR;
     }
 
 public:
-    bool is_valid() const noexcept {
-        return is_height_correct(sentinel -> left_child.get()) & is_parent_child_link_mutual(sentinel.get()) &
-                is_inorder(cbegin(), cend()) & is_size_correct(sentinel -> left_child.get(), element_count);
+    bool __is_valid() const noexcept {
+        return __is_height_correct(sentinel -> left_child.get()) & sentinel -> __is_parent_child_link_mutual() &
+                __is_inorder(cbegin(), cend()) & __is_size_correct(sentinel -> left_child.get(), element_count);
     }
 };
 }

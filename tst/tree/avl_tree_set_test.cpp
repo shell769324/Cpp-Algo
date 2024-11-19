@@ -3,6 +3,7 @@
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
 #include <iostream>
+#include "tst/utility/tracking_allocator.h"
 #include "tst/set_test.h"
 
 namespace {
@@ -23,7 +24,7 @@ namespace {
         }
     };
 
-    using stub_avl_set_type = avl_tree_set<constructor_stub, constructor_stub_comparator>;
+    using stub_avl_set_type = avl_tree_set<constructor_stub, constructor_stub_comparator, tracking_allocator<constructor_stub> >;
 
-    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree_set_interface, set_test, stub_avl_set_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree, set_test, stub_avl_set_type);
 }

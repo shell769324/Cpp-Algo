@@ -4,6 +4,7 @@
 #include "utility/constructor_stub.h"
 #include "utility/common.h"
 #include "src/thread_pool_executor/thread_pool_executor.h"
+#include "utility/tracking_allocator.h"
 
 namespace {
     using namespace algo;
@@ -40,15 +41,25 @@ namespace {
     class map_test : public testing::Test {
         public:
         thread_pool_executor executor;
+        typename T::allocator_type allocator;
         protected:
+        static void SetUpTestCase() {
+            std::srand(7759);
+        }
+
         virtual void SetUp() {
+            tracking_allocator<typename T::node_type>::reset();
+            tracking_allocator<typename T::value_type>::reset();
             constructor_stub::reset_constructor_destructor_counter();
         }
 
         virtual void TearDown() {
             EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
+            tracking_allocator<typename T::node_type>::check();
+            tracking_allocator<typename T::value_type>::check();
         }
 
+        public:
         static void equivalence_test(const T& map, std::vector<typename T::value_type>& stub_pairs) {
             for (unsigned i = 0; i < stub_pairs.size(); ++i) {
                 const constructor_stub& key = stub_pairs[i].first;
@@ -116,7 +127,7 @@ namespace {
                         EXPECT_NE(map.find(stub_pairs[j].first), map.cend());
                         EXPECT_EQ(map[stub_pairs[j].first], stub_pairs[j].second);
                     }
-                    EXPECT_TRUE(map.is_valid());
+                    EXPECT_TRUE(map.__is_valid());
                 }
                 ++i;
             }
@@ -136,10 +147,10 @@ namespace {
                 EXPECT_EQ(map.find(pair.first), map.cend());
                 EXPECT_EQ(map.size(), curr_size);
                 if (curr_size % skip == 0) {
-                    EXPECT_TRUE(map.is_valid());
+                    EXPECT_TRUE(map.__is_valid());
                 }
             }
-            EXPECT_TRUE(map.is_empty());
+            EXPECT_TRUE(map.empty());
         }
 
         static void erase_by_iterator(std::size_t size) {
@@ -148,7 +159,7 @@ namespace {
             std::size_t curr_size = size;
             typename T::iterator it = map.begin();
             unsigned skip = std::max(size / REPEAT, (std::size_t) 1);
-            while (!map.is_empty()) {
+            while (!map.empty()) {
                 typename T::value_type pair = *it;
                 EXPECT_NE(map.find(pair.first), map.end());
                 mark_constructor_counts();
@@ -158,55 +169,64 @@ namespace {
                 EXPECT_EQ(map.find(pair.first), map.cend());
                 EXPECT_EQ(map.size(), curr_size);
                 if (curr_size % skip == 0) {
-                    EXPECT_TRUE(map.is_valid());
+                    EXPECT_TRUE(map.__is_valid());
                 }
             }
             EXPECT_EQ(it, map.end());
         }
 
         template<typename Map>
-        static void max_leq_test_template() {
-            auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
-            auto stub_pairs = get_random_stub_pair_vector(stubs);
-            T src(stub_pairs.cbegin(), stub_pairs.cend());
+        static void upper_bound_test_template() {
+            auto stubs = get_random_stub_vector(MEDIUM_LIMIT, 0, LIMIT);
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
-            int middle_index = stubs.size() / 2;
+            for (auto& stub : stubs) {
+                stub.id *= 2;
+            }
+            auto stub_pairs = get_random_stub_pair_vector(stubs);
+            T src(stub_pairs.cbegin() + 1, stub_pairs.cend());
             Map& map = src;
-            // With existing element
-            EXPECT_EQ((*map.max_leq(stubs[middle_index])).first, stubs[middle_index]);
-            // With absent element
-            int num = (stubs[middle_index].id + stubs[middle_index + 1].id) / 2;
-            constructor_stub stub(num);
-            auto& pair = *map.max_leq(stub);
-            EXPECT_EQ(pair.first, stubs[middle_index]);
+            // Query an element that is less than the smallest in the map
+            EXPECT_EQ((*map.upper_bound(stubs.front())).first, stubs[1]);
+            for (std::size_t i = 1; i + 1 < stubs.size(); ++i) {
+                // With existing element
+                EXPECT_EQ((*map.upper_bound(stubs[i])).first, stubs[i + 1]);
+                // With absent element
+                int num = (stubs[i].id + stubs[i + 1].id) / 2;
+                constructor_stub stub(num);
+                auto& pair = *map.upper_bound(stub);
+                EXPECT_EQ(pair.first, stubs[i + 1]);
+            }
+            EXPECT_EQ(map.upper_bound(stubs.back()), map.end());
+            auto& pair = *map.upper_bound(stubs.front());
             EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(pair)>>,
                     std::is_const_v<Map>);
-            EXPECT_EQ(map.max_leq(stubs.front().id - 1), map.end());
         }
 
         template <typename Map>
-        static void min_geq_test_template() {
+        static void lower_bound_test_template() {
             auto stubs = get_random_stub_vector(MEDIUM_LIMIT);
-            auto stub_pairs = get_random_stub_pair_vector(stubs);
-            T src(stub_pairs.cbegin(), stub_pairs.cend());
-            Map& map = src;
             std::sort(stubs.begin(), stubs.end(), constructor_stub_comparator());
-            int middle_index = stubs.size() / 2;
-            // With existing element
-            EXPECT_EQ((*map.min_geq(stubs[middle_index])).first, stubs[middle_index]);
-            // With absent element
-            int num = (stubs[middle_index].id + stubs[middle_index - 1].id) / 2;
-            constructor_stub stub(num);
-            auto& pair = *map.min_geq(stub);
-            if (stubs[middle_index - 1].id + 1 == stubs[middle_index].id) {
-                EXPECT_EQ(pair.first, stubs[middle_index - 1]);
-            } else {
-                EXPECT_EQ(pair.first, stubs[middle_index]);
+            for (auto& stub : stubs) {
+                stub.id *= 2;
             }
-            std::cout << pair.first.id;
+            auto stub_pairs = get_random_stub_pair_vector(stubs);
+            T src(stub_pairs.cbegin() + 1, stub_pairs.cend());
+            Map& map = src;
+            // Query an element that is less than the smallest in the map
+            EXPECT_EQ((*map.lower_bound(stubs.front())).first, stubs[1]);
+            for (std::size_t i = 1; i + 1 < stubs.size(); ++i) {
+                // With existing element
+                EXPECT_EQ((*map.lower_bound(stubs[i])).first, stubs[i]);
+                // With absent element
+                int num = (stubs[i].id + stubs[i + 1].id) / 2;
+                constructor_stub stub(num);
+                auto& pair = *map.lower_bound(stub);
+                EXPECT_EQ(pair.first, stubs[i + 1]);
+            }
+            EXPECT_EQ(map.lower_bound(stubs.back().id + 1), map.end());
+            auto& pair = *map.upper_bound(stubs.front());
             EXPECT_EQ(std::is_const_v<std::remove_reference_t<decltype(pair)>>,
                     std::is_const_v<Map>);
-            EXPECT_EQ(map.min_geq(stubs.back().id + 1), map.end());
         }
 
         template<typename Resolver>
@@ -222,7 +242,7 @@ namespace {
                 map = union_of<Resolver>(std::move(map_copy1), std::move(map_copy2), resolver);
             }
             check_constructor_counts();
-            EXPECT_TRUE(map.is_valid());
+            EXPECT_TRUE(map.__is_valid());
             // No element is missing
             for (const auto& pair : map1) {
                 EXPECT_NE(map.find(pair.first), map.end());
@@ -260,7 +280,7 @@ namespace {
                 map = intersection_of<Resolver>(std::move(map_copy1), std::move(map_copy2), resolver);
             }
             check_constructor_counts();
-            EXPECT_TRUE(map.is_valid());
+            EXPECT_TRUE(map.__is_valid());
             // No extraneous elements
             for (const auto& pair : map) {
                 EXPECT_TRUE(map1.find(pair.first) != map1.end() && map2.find(pair.first) != map2.end());
@@ -291,7 +311,7 @@ namespace {
                 map = difference_of(std::move(map_copy1), std::move(map_copy2));
             }
             check_constructor_counts();
-            EXPECT_TRUE(map.is_valid());
+            EXPECT_TRUE(map.__is_valid());
             // No extraneous elements
             for (const auto& pair : map) {
                 EXPECT_TRUE(map1.find(pair.first) != map1.end() && map2.find(pair.first) == map2.end());
@@ -326,14 +346,99 @@ namespace {
 
     TYPED_TEST_SUITE_P(map_test);
 
-    TYPED_TEST_P(map_test, default_constructor_test) {
-        TypeParam map;
+    TYPED_TEST_P(map_test, trait_test) {
+        using const_node_type = constify<std::pair<const constructor_stub, constructor_stub>, typename TypeParam::node_type>;
+        bool correct = std::is_same_v<typename TypeParam::key_type, constructor_stub>
+            && std::is_same_v<typename TypeParam::mapped_type, constructor_stub>
+            && std::is_same_v<typename TypeParam::value_type, std::pair<const constructor_stub, constructor_stub> >
+            && std::is_same_v<typename TypeParam::size_type, std::size_t>
+            && std::is_same_v<typename TypeParam::difference_type, std::ptrdiff_t>
+            && std::is_same_v<typename TypeParam::key_compare, constructor_stub_comparator>
+            && std::is_same_v<typename TypeParam::allocator_type, tracking_allocator<std::pair<const constructor_stub, constructor_stub> > >
+            && std::is_same_v<typename TypeParam::reference, std::pair<const constructor_stub, constructor_stub>&>
+            && std::is_same_v<typename TypeParam::const_reference, const std::pair<const constructor_stub, constructor_stub>&>
+            && std::is_same_v<typename TypeParam::pointer, std::pair<const constructor_stub, constructor_stub>*>
+            && std::is_same_v<typename TypeParam::const_pointer, const std::pair<const constructor_stub, constructor_stub>*>
+            && std::is_same_v<typename TypeParam::iterator, binary_tree_iterator<typename TypeParam::node_type, false> >
+            && std::is_same_v<typename TypeParam::const_iterator, binary_tree_iterator<const_node_type, false> >
+            && std::is_same_v<typename TypeParam::reverse_iterator, binary_tree_iterator<typename TypeParam::node_type, true> >
+            && std::is_same_v<typename TypeParam::const_reverse_iterator, binary_tree_iterator<const_node_type, true> >;
+        EXPECT_TRUE(correct);
     }
 
-    TYPED_TEST_P(map_test, comp_constructor_test) {
+    template <typename Map>
+    void default_constructor_test_helper(Map& map) {
+        EXPECT_TRUE(map.__is_valid());
+        EXPECT_EQ(constructor_stub::constructor_invocation_count, 0);
+        EXPECT_EQ(allocated<typename Map::node_type>, 1);
+    }
+
+    TYPED_TEST_P(map_test, default_constructor_test) {
+        TypeParam map;
+        default_constructor_test_helper(map);
+    }
+
+    TYPED_TEST_P(map_test, allocator_constructor_test) {
+        TypeParam map(this -> allocator);
+        default_constructor_test_helper(map);
+        EXPECT_EQ(this -> allocator, map.get_allocator());
+    }
+
+    template <typename Map, typename Comp>
+    void comp_allocator_constructor_test_helper(Map& map, Comp& comp) {
+        EXPECT_EQ(constructor_stub::constructor_invocation_count, 0);
+        EXPECT_EQ(allocated<typename Map::node_type>, 1);
+
+        EXPECT_EQ(comp, map.key_comp());
+    }
+
+    TYPED_TEST_P(map_test, comp_allocator_constructor_test) {
+        constructor_stub_comparator comp(true);
+        TypeParam map(comp, this -> allocator);
+        comp_allocator_constructor_test_helper(map, comp);
+        EXPECT_EQ(this -> allocator, map.get_allocator());
+    }
+
+    TYPED_TEST_P(map_test, comp_allocator_constructor_optional_test) {
         constructor_stub_comparator comp(true);
         TypeParam map(comp);
-        EXPECT_TRUE(map.key_comp().reverse);
+        comp_allocator_constructor_test_helper(map, comp);
+    }
+
+    template <typename Map, typename Pairs>
+    void comp_allocator_range_constructor_test_helper(Map& map, Pairs& pairs) {
+        map_test<Map>::equivalence_test(map, pairs);
+        EXPECT_EQ(allocated<typename Map::node_type>, pairs.size() + 1);
+    }
+
+    TYPED_TEST_P(map_test, comp_allocator_range_constructor_test) {
+        constructor_stub_comparator comp;
+        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
+        TypeParam map(stub_pairs.begin(), stub_pairs.end(), comp, this -> allocator);
+        comp_allocator_range_constructor_test_helper(map, stub_pairs);
+        EXPECT_EQ(comp, map.key_comp());
+        EXPECT_EQ(this -> allocator, map.get_allocator());
+    }
+
+    TYPED_TEST_P(map_test, comp_allocator_range_constructor_optional_allocator_test) {
+        constructor_stub_comparator comp;
+        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
+        TypeParam map(stub_pairs.begin(), stub_pairs.end(), comp);
+        comp_allocator_range_constructor_test_helper(map, stub_pairs);
+        EXPECT_EQ(comp, map.key_comp());
+    }
+
+    TYPED_TEST_P(map_test, comp_allocator_range_constructor_both_optional_test) {
+        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
+        TypeParam map(stub_pairs.begin(), stub_pairs.end());
+        comp_allocator_range_constructor_test_helper(map, stub_pairs);
+    }
+
+    TYPED_TEST_P(map_test, allocator_range_constructor_test) {
+        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
+        TypeParam map(stub_pairs.begin(), stub_pairs.end(), this -> allocator);
+        comp_allocator_range_constructor_test_helper(map, stub_pairs);
+        EXPECT_EQ(this -> allocator, map.get_allocator());
     }
 
     TYPED_TEST_P(map_test, copy_constructor_test) {
@@ -341,23 +446,59 @@ namespace {
         constructor_stub_comparator comp(true);
         TypeParam map(comp);
         map.insert(stub_pairs.begin(), stub_pairs.end());
+        std::size_t alloc_count = allocated<typename TypeParam::node_type>;
         TypeParam map_copy(map);
-        EXPECT_TRUE(map_copy.is_valid());
-        EXPECT_TRUE(map_copy.key_comp().reverse);
+        EXPECT_EQ(alloc_count + SMALL_LIMIT + 1, allocated<typename TypeParam::node_type>);
+        EXPECT_TRUE(map_copy.__is_valid());
+        EXPECT_EQ(map_copy.key_comp(), comp);
         this -> equivalence_test(map_copy, stub_pairs);
+        EXPECT_EQ(map.get_allocator(), map_copy.get_allocator());
+    }
+
+    TYPED_TEST_P(map_test, allocator_copy_constructor_test) {
+        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
+        constructor_stub_comparator comp(true);
+        TypeParam map(comp);
+        map.insert(stub_pairs.begin(), stub_pairs.end());
+        std::size_t alloc_count = allocated<typename TypeParam::node_type>;
+        TypeParam map_copy(map, this -> allocator);
+        EXPECT_EQ(alloc_count + SMALL_LIMIT + 1, allocated<typename TypeParam::node_type>);
+        EXPECT_TRUE(map_copy.__is_valid());
+        EXPECT_EQ(map_copy.key_comp(), comp);
+        this -> equivalence_test(map_copy, stub_pairs);
+        EXPECT_EQ(this -> allocator, map_copy.get_allocator());
     }
 
     TYPED_TEST_P(map_test, move_constructor_test) {
         auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
         constructor_stub_comparator comp(true);
+        TypeParam map(comp, this -> allocator);
+        map.insert(stub_pairs.begin(), stub_pairs.end());
+        mark_constructor_counts();
+        std::size_t alloc_count = allocated<typename TypeParam::node_type>;
+        TypeParam map_copy(std::move(map));
+        EXPECT_EQ(alloc_count, allocated<typename TypeParam::node_type>);
+        check_constructor_counts();
+        EXPECT_TRUE(map_copy.__is_valid());
+        EXPECT_EQ(map_copy.key_comp(), comp);
+        this -> equivalence_test(map_copy, stub_pairs);
+        EXPECT_EQ(this -> allocator, map_copy.get_allocator());
+    }
+
+    TYPED_TEST_P(map_test, allocator_move_constructor_test) {
+        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
+        constructor_stub_comparator comp(true);
         TypeParam map(comp);
         map.insert(stub_pairs.begin(), stub_pairs.end());
         mark_constructor_counts();
-        TypeParam map_copy(std::move(map));
+        std::size_t alloc_count = allocated<typename TypeParam::node_type>;
+        TypeParam map_copy(std::move(map), this -> allocator);
+        EXPECT_EQ(alloc_count, allocated<typename TypeParam::node_type>);
         check_constructor_counts();
-        EXPECT_TRUE(map_copy.is_valid());
-        EXPECT_TRUE(map_copy.key_comp().reverse);
+        EXPECT_TRUE(map_copy.__is_valid());
+        EXPECT_EQ(map_copy.key_comp(), comp);
         this -> equivalence_test(map_copy, stub_pairs);
+        EXPECT_EQ(this -> allocator, map_copy.get_allocator());
     }
 
     TYPED_TEST_P(map_test, assignment_operator_test) {
@@ -367,7 +508,7 @@ namespace {
         map1.insert(stub_pairs.begin(), stub_pairs.end());
         TypeParam map2;
         map2 = map1;
-        EXPECT_TRUE(map2.is_valid());
+        EXPECT_TRUE(map2.__is_valid());
         this -> equivalence_test(map2, stub_pairs);
     }
 
@@ -380,14 +521,8 @@ namespace {
         mark_constructor_counts();
         map2 = std::move(map1);
         check_constructor_counts();
-        EXPECT_TRUE(map2.is_valid());
+        EXPECT_TRUE(map2.__is_valid());
         this -> equivalence_test(map2, stub_pairs);
-    }
-    
-    TYPED_TEST_P(map_test, range_constructor_test) {
-        auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
-        TypeParam map(stub_pairs.begin(), stub_pairs.end());
-        this -> equivalence_test(map, stub_pairs);
     }
 
     TYPED_TEST_P(map_test, at_test) {
@@ -515,11 +650,11 @@ namespace {
         EXPECT_EQ(i, MEDIUM_LIMIT);
     }
 
-    TYPED_TEST_P(map_test, is_empty_test) {
+    TYPED_TEST_P(map_test, empty_test) {
         TypeParam map;
-        EXPECT_TRUE(map.is_empty());
+        EXPECT_TRUE(map.empty());
         map[SPECIAL_VALUE] = SPECIAL_VALUE;
-        EXPECT_FALSE(map.is_empty());
+        EXPECT_FALSE(map.empty());
     }
 
     TYPED_TEST_P(map_test, size_test) {
@@ -533,7 +668,7 @@ namespace {
         auto stub_pairs = get_random_stub_pair_vector(SMALL_LIMIT);
         TypeParam map(stub_pairs.begin(), stub_pairs.end());
         map.clear();
-        EXPECT_TRUE(map.is_empty());
+        EXPECT_TRUE(map.empty());
     }
     
     // Core methods (find and insert) tests
@@ -632,7 +767,7 @@ namespace {
             auto pair = *map.find(stub);
             EXPECT_EQ(pair.second, stub_pairs[i].second);
         }
-        EXPECT_TRUE(map.is_valid());
+        EXPECT_TRUE(map.__is_valid());
     }
 
     TYPED_TEST_P(map_test, emplace_lvalue_test) {
@@ -804,7 +939,7 @@ namespace {
             EXPECT_EQ(map.find(stubs[i]), map.end());
         }
         map.erase(map.begin(), map.end());
-        EXPECT_TRUE(map.is_empty());
+        EXPECT_TRUE(map.empty());
     }
 
     TYPED_TEST_P(map_test, swap_test) {
@@ -827,20 +962,20 @@ namespace {
     }
 
     // Upper bound and lower bound tests
-    TYPED_TEST_P(map_test, max_leq_test) {
-        this -> template max_leq_test_template<TypeParam>();
+    TYPED_TEST_P(map_test, upper_bound_test) {
+        this -> template upper_bound_test_template<TypeParam>();
     }
 
-    TYPED_TEST_P(map_test, max_leq_const_test) {
-        this -> template max_leq_test_template<const TypeParam>();
+    TYPED_TEST_P(map_test, upper_bound_const_test) {
+        this -> template upper_bound_test_template<const TypeParam>();
     }
 
-    TYPED_TEST_P(map_test, min_geq_test) {
-        this -> template min_geq_test_template<TypeParam>();
+    TYPED_TEST_P(map_test, lower_bound_test) {
+        this -> template lower_bound_test_template<TypeParam>();
     }
 
-    TYPED_TEST_P(map_test, min_geq_const_test) {
-        this -> template min_geq_test_template<const TypeParam>();
+    TYPED_TEST_P(map_test, lower_bound_const_test) {
+        this -> template lower_bound_test_template<const TypeParam>();
     }
 
     class stub_pair_resolver {
@@ -1177,14 +1312,58 @@ namespace {
         }
     }
 
+    TYPED_TEST_P(map_test, equality_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        TypeParam map1(stub_pairs.cbegin(), stub_pairs.cend());
+        TypeParam map2(stub_pairs.cbegin(), stub_pairs.cend());
+        EXPECT_EQ(map1, map2);
+    }
+
+    TYPED_TEST_P(map_test, inequality_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        TypeParam map1(stub_pairs.cbegin(), stub_pairs.cend());
+        TypeParam map2(stub_pairs.cbegin(), stub_pairs.cend() - 1);
+        EXPECT_NE(map1, map2);
+    }
+
+    TYPED_TEST_P(map_test, three_way_comparison_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        TypeParam map1(stub_pairs.cbegin(), stub_pairs.cend());
+        stub_pairs.back().second.id++;
+        TypeParam map2(stub_pairs.cbegin(), stub_pairs.cend());
+        EXPECT_LE(map1, map2);
+        EXPECT_LT(map1, map2);
+        EXPECT_GT(map2, map1);
+        EXPECT_GE(map2, map1);
+    }
+
+    TYPED_TEST_P(map_test, three_way_comparison_length_test) {
+        auto stub_pairs = get_random_stub_pair_vector(MEDIUM_LIMIT);
+        TypeParam map1(stub_pairs.cbegin(), stub_pairs.cend());
+        map1.erase(std::prev(map1.end()));
+        TypeParam map2(stub_pairs.cbegin(), stub_pairs.cend());
+        EXPECT_LE(map1, map2);
+        EXPECT_LT(map1, map2);
+        EXPECT_GT(map2, map1);
+        EXPECT_GE(map2, map1);
+    }
+
     REGISTER_TYPED_TEST_SUITE_P(map_test,
+        trait_test,
         default_constructor_test,
-        comp_constructor_test,
+        comp_allocator_constructor_test,
+        comp_allocator_constructor_optional_test,
+        allocator_constructor_test,
+        comp_allocator_range_constructor_test,
+        comp_allocator_range_constructor_optional_allocator_test,
+        comp_allocator_range_constructor_both_optional_test,
+        allocator_range_constructor_test,
         copy_constructor_test,
+        allocator_copy_constructor_test,
         move_constructor_test,
+        allocator_move_constructor_test,
         assignment_operator_test,
-        move_assignment_operator_test,
-        range_constructor_test,     
+        move_assignment_operator_test, 
         at_test,
         at_const_test,
         subscript_reference_lvalue_test,
@@ -1197,7 +1376,7 @@ namespace {
         rbegin_rend_test,
         const_rbegin_rend_test,
         crbegin_crend_test,
-        is_empty_test,
+        empty_test,
         size_test,
         clear_test,
         const_ref_insert_find_basic_test,
@@ -1228,10 +1407,10 @@ namespace {
         erase_range_test,
         swap_test,
         contains_test,
-        max_leq_test,
-        max_leq_const_test,
-        min_geq_test,
-        min_geq_const_test,
+        upper_bound_test,
+        upper_bound_const_test,
+        lower_bound_test,
+        lower_bound_const_test,
         union_of_basic_test,
         union_of_basic_parallel_test,
         union_of_conflict_basic_test,
@@ -1256,6 +1435,10 @@ namespace {
         difference_of_intermediate_test,
         difference_of_stress_test,
         difference_of_stress_parallel_test,
-        mixed_stress_test
+        mixed_stress_test,
+        equality_test,
+        inequality_test,
+        three_way_comparison_test,
+        three_way_comparison_length_test
     );
 }

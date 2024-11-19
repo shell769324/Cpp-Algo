@@ -50,6 +50,15 @@ namespace {
         return data;
     }
 
+    TEST_F(deque_iterator_test, trait_test) {
+        bool correct = std::is_same_v<deque_iterator<constructor_stub>::iterator_category, std::random_access_iterator_tag>
+            && std::is_same_v<deque_iterator<constructor_stub>::value_type, constructor_stub>
+            && std::is_same_v<deque_iterator<constructor_stub>::reference, constructor_stub&>
+            && std::is_same_v<deque_iterator<constructor_stub>::pointer, constructor_stub*>
+            && std::is_same_v<deque_iterator<constructor_stub>::difference_type, std::ptrdiff_t>;
+        EXPECT_TRUE(correct);
+    }
+
     TEST_F(deque_iterator_test, default_constructor_test) {
         deque_iterator<int> it1, it2;
         EXPECT_EQ(it1, it2);

@@ -88,6 +88,14 @@ constructor_stub& constructor_stub::operator=(constructor_stub&& other) noexcept
     return *this;
 }
 
+bool operator==(const constructor_stub& stub1, const constructor_stub& stub2) noexcept {
+    return stub1.id == stub2.id;
+}
+
+std::strong_ordering operator<=>(const constructor_stub& stub1, const constructor_stub& stub2) noexcept {
+    return stub1.id <=> stub2.id;
+}
+
 void constructor_stub::reset_constructor_destructor_counter() noexcept {
     default_constructor_invocation_count = 0;
     id_constructor_invocation_count = 0;
@@ -111,8 +119,5 @@ bool constructor_stub::is_valid() noexcept {
     return magic == MAGIC;
 }
 
-bool operator==(const constructor_stub& a, const constructor_stub& b) {
-    return a.id == b.id;
-}
 }
 #pragma GCC diagnostic pop

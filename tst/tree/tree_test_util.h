@@ -17,7 +17,7 @@ namespace algo {
 
     void is_parent_right_child_test(const binary_tree_node<constructor_stub>* node, const binary_tree_node<constructor_stub>* right_child);
 
-    std::unique_ptr<binary_tree_node<constructor_stub> > create_perfectly_balance_tree(int size, int offset);
+    binary_tree_node<constructor_stub>::unique_ptr_type create_perfectly_balance_tree(int size, int offset);
 
     template <typename T, typename Derived>
     int compute_height(const binary_tree_node_base<T, Derived>* node) {

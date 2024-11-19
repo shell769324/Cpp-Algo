@@ -1,12 +1,8 @@
 #pragma once
 
 #include "src/deque/deque_constants.h"
-#include <iostream>
 
 namespace algo {
-template<typename T>
-class deque;
-
 template <typename T, bool Reverse=false>
 class deque_iterator {
 
@@ -15,7 +11,7 @@ public:
     using value_type        = T;
     using reference         = T&;
     using pointer           = T*;
-    using difference_type   = long signed;
+    using difference_type   = std::ptrdiff_t;
 
 private:
     using non_const_T = std::remove_const_t<T>;
@@ -104,6 +100,11 @@ private:
     }
 
 public:
+    /**
+     * @brief Increment the iterator
+     * 
+     * @return a reference to self
+     */
     deque_iterator& operator++() noexcept {
         if constexpr (Reverse) {
             absolute_decrement();
@@ -128,6 +129,11 @@ private:
     }
 
 public:
+    /**
+     * @brief Increment the iterator delta of times
+     * 
+     * @return a reference to self
+     */
     deque_iterator& operator+=(const int& delta) noexcept {
         if constexpr (Reverse) {
             increase(-delta);
@@ -136,23 +142,44 @@ public:
         }
         return *this;
     }
-
+    
+    /**
+     * @brief Increment the iterator
+     * 
+     * @return a copy of the iterator before the increment
+     */
     deque_iterator operator++(int) noexcept {
         deque_iterator tmp = *this;
         ++(*this);
         return tmp;
     }
 
+    /**
+     * @brief Increment a copy of the iterator delta of times
+     * 
+     * @param delta 
+     * @return the copy of the iterator after the increments 
+     */
     deque_iterator operator+(const int& delta) const noexcept {
         deque_iterator tmp = *this;
         return tmp += delta;
     }
 
+    /**
+     * @brief Increment the input iterator delta of times
+     * 
+     * @param delta 
+     * @return the input iterator after the increments 
+     */
     friend deque_iterator operator+(const int& delta, deque_iterator it) noexcept {
-        deque_iterator tmp = it;
-        return tmp += delta;
+        return it += delta;
     }
 
+    /**
+     * @brief Decrement the iterator
+     * 
+     * @return a reference to self
+     */
     deque_iterator& operator--() noexcept {
         if constexpr (Reverse) {
             absolute_increment();
@@ -162,22 +189,45 @@ public:
         return *this;
     }
 
+    /**
+     * @brief Decrement the iterator delta number of times
+     * 
+     * @return a reference to self
+     */
     deque_iterator& operator-=(const int& delta) noexcept {
         return *this += -delta;
     }
 
+    /**
+     * @brief Decrement the iterator
+     * 
+     * @return a copy of the iterator before the decrement
+     */
     deque_iterator operator--(int) noexcept {
         deque_iterator tmp = *this;
         --(*this);
         return tmp;
     }
 
+    /**
+     * @brief Decrement a copy of this iterator delta of times
+     * 
+     * @param delta 
+     * @return the copy of this iterator after the decrements 
+     */
     deque_iterator operator-(const int& delta) const noexcept {
         deque_iterator tmp = *this;
         tmp -= delta;
         return tmp;
     }
 
+    /**
+     * @brief Compute the distance between this iterator and another iterator
+     * 
+     * @param other another iterator
+     * @return difference_type the number of steps (could be negative) between the
+     * this iterator and the other iterator
+     */
     difference_type operator-(const deque_iterator& other) const noexcept {
         difference_type res = (outer_pointer - other.outer_pointer) * CHUNK_SIZE<T> + 
             (inner_pointer - *outer_pointer) - (other.inner_pointer - *other.outer_pointer);
@@ -187,11 +237,17 @@ public:
         return res;
     }
 
+    /**
+     * @brief Implement all comparison operators
+     */
     std::strong_ordering operator<=>(const deque_iterator& other) const noexcept {
         difference_type offset = *this - other;
         return offset <=> 0;
     }
 
+    /**
+     * @brief Swap this iterator and another iterator
+     */
     void swap(deque_iterator& other) noexcept {
         std::swap(inner_pointer, other.inner_pointer);
         std::swap(outer_pointer, other.outer_pointer);
@@ -204,12 +260,14 @@ public:
      * @param it2 the second iterator
      * @return true if they are equal, false otherwise
      */
-    friend bool operator==(const deque_iterator& it1, const deque_iterator& it2) {
+    friend bool operator==(const deque_iterator& it1, const deque_iterator& it2) noexcept {
         return it1.outer_pointer == it2.outer_pointer && it1.inner_pointer == it2.inner_pointer;
     }
 
-    friend class deque<T>;
-    friend class deque<non_const_T>;
+    template<typename U, typename Allocator>
+    requires std::same_as<U, typename std::allocator_traits<Allocator>::value_type>
+    friend class deque;
+
     friend class deque_iterator<T, !Reverse>;
     friend std::conditional<(std::is_const_v<T>), deque_iterator<non_const_T, Reverse>, void>::type;
     friend std::conditional<(!std::is_const_v<T>), deque_iterator<const T, Reverse>, void>::type;

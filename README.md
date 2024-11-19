@@ -17,10 +17,11 @@ The project is built using CMake 3.30. Implementations go into `src` directory a
 | Parallelism infra and binary tree parallelism | Thread pool executor implementation and parallel implementation of union, intersection and difference | Complete |
 | Deque | A generic deque with better memory characteristics | Complete |
 | Binary indexed tree and Segment tree | Generic binary indexed tree and segment tree | Complete |
-| Custom allocator | Custom allocator support for vector and deque | Milestone 7 |
-| Splay tree | A generic tree data structure that supports fast access for recently accessed elements | Milestone 8 |
-| Treap with augmentation | A probabilistic tree data structure that supports associative operator| Milestone 9 |
-| Performance tuning | Performance Benchmark for all tree implementations and memory allocation improvement | Milestone 10 |
+| Custom allocator | Custom allocator support for all data structures and add test harness to trace memory leak | Milestone 7 |
+| Chunk allocator | Parallel chunk allocator that saves memory allocation | Milestone 8 |
+| Splay tree | A generic tree data structure that supports fast access for recently accessed elements | Milestone 9 |
+| Treap with augmentation | A probabilistic tree data structure that supports associative operator| Milestone 10 |
+| Performance tuning | Performance Benchmark for all tree implementations and memory allocation improvement | Milestone 11 |
 
 
 ## Testing

@@ -3,6 +3,7 @@
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
 #include "tst/map_test.h"
+#include "tst/utility/tracking_allocator.h"
 #include <iostream>
 
 namespace {
@@ -23,7 +24,7 @@ namespace {
         }
     };
 
-    using stub_avl_map_type = avl_tree_map<constructor_stub, constructor_stub, constructor_stub_comparator>;
+    using stub_avl_map_type = avl_tree_map<constructor_stub, constructor_stub, constructor_stub_comparator, tracking_allocator<std::pair<const constructor_stub, constructor_stub> > >;
 
-    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree_map_interface, map_test, stub_avl_map_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree, map_test, stub_avl_map_type);
 }

@@ -3,6 +3,21 @@
 #include "binary_tree_common.h"
 
 namespace algo {
+template<typename, typename>
+struct rebinder {};
+
+template<typename A, template<typename> typename C, typename B>
+struct rebinder<A, C<B>> {
+    using type = C<A>;
+};
+
+// Get the type of a container with its value type swapped to T
+template<typename T, typename Node>
+using non_constify = rebinder<std::remove_const_t<T>, Node>::type;
+
+template<typename T, typename Node>
+using constify = rebinder<std::add_const_t<T>, Node>::type;
+
 /**
  * @brief Bidirectional iterator for binary tree
  * 
@@ -10,8 +25,9 @@ namespace algo {
  * @tparam Reverse if true, the iterator will iterate in the opposite way
  *         its non-reverse counterpart do 
  */
-template <typename T, bool Reverse=false>
+template <typename Node, bool Reverse=false>
 class binary_tree_iterator {
+    using T = typename Node::value_type;
 
 public:
     using iterator_category = std::bidirectional_iterator_tag;
@@ -20,15 +36,19 @@ public:
     using pointer           = T*;
     using difference_type   = std::ptrdiff_t;
 
+private:
     using non_const_T = std::remove_const_t<T>;
 
-private:
     // Note that any data structure in this package only accepts
     // cv-unqualified data type so the only occurrence of the type T
     // in the template being const-qualified is const_iterator
 
     // The tree node's data type T is always non-const qualified
-    iterable_node<non_const_T>* node;
+    // The reason to store the non-const node is to faciliate easy conversion from
+    // non-const iterator to const iterator
+    using node_type = non_constify<T, Node>;
+    using const_node_type = constify<T, Node>;
+    node_type* node;
 
 public:
     /**
@@ -36,7 +56,7 @@ public:
      * 
      * @param node the node to start iterating from
      */
-    binary_tree_iterator(iterable_node<non_const_T>* node = nullptr) : node(node) { }
+    binary_tree_iterator(node_type* node = nullptr) : node(node) { }
 
     /**
      * @brief Construct a copy of another tree iterator
@@ -79,7 +99,7 @@ private:
      * 
      * @param other the const iterator to copy from
      */
-    explicit binary_tree_iterator(const binary_tree_iterator<const T, Reverse>& other)
+    explicit binary_tree_iterator(const binary_tree_iterator<const_node_type, Reverse>& other)
         requires (!std::is_const_v<T>) : node(other.node) { }
 
 public:
@@ -88,7 +108,7 @@ public:
      * 
      * @param other a non-const tree iterator
      */
-    binary_tree_iterator(const binary_tree_iterator<non_const_T, Reverse>& other)
+    binary_tree_iterator(const binary_tree_iterator<node_type, Reverse>& other)
         requires std::is_const_v<T> : node(other.node) { }
 
     /**
@@ -170,22 +190,22 @@ public:
      * @param it2 the second iterator
      * @return true if they are equal, false otherwise
      */
-    friend bool operator==(const binary_tree_iterator& it1, const binary_tree_iterator& it2) {
+    friend bool operator==(const binary_tree_iterator& it1, const binary_tree_iterator& it2) noexcept {
         return it1.node == it2.node;
     }
 
     // Ideally the value type V should be T but cpp doesn't allow partially
     // specialized template friend class
-    template <typename K, typename V, typename KeyOf, typename Comparator>
-    requires binary_tree_definable<K, V, KeyOf, Comparator>
+    template <typename K, typename V, typename KeyOf, typename Comparator, typename Allocator>
+    requires binary_tree_definable<K, V, KeyOf, Comparator, Allocator>
     friend class avl_tree;
 
-    template <typename K, typename V, typename KeyOf, typename Comparator>
-    requires binary_tree_definable<K, V, KeyOf, Comparator>
+    template <typename K, typename V, typename KeyOf, typename Comparator, typename Allocator>
+    requires binary_tree_definable<K, V, KeyOf, Comparator, Allocator>
     friend class red_black_tree;
 
     // const and non-const iterator of the same base type are friends
-    friend std::conditional<std::is_const_v<T>, binary_tree_iterator<non_const_T, Reverse>, void>::type;
-    friend std::conditional<(!std::is_const_v<T>), binary_tree_iterator<const T, Reverse>, void>::type;
+    friend std::conditional<std::is_const_v<T>, binary_tree_iterator<node_type, Reverse>, void>::type;
+    friend std::conditional<(!std::is_const_v<T>), binary_tree_iterator<const_node_type, Reverse>, void>::type;
 };
 }

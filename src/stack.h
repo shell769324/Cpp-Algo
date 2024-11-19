@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "deque/deque.h"
 
 namespace algo {
 
@@ -9,62 +10,18 @@ namespace algo {
  * 
  * @tparam T the type of elements in the stack 
  */
-template <typename T>
+template <typename T, typename Container = deque<T> >
+requires std::same_as<T, typename Container::value_type>
 class stack {
 public:
-    using value_type = T;
-    using reference = T&;
-    using const_reference = T const&;
-    using pointer = T*;
+    using container_type = Container;
+    using value_type = Container::value_type;
+    using size_type = Container::size_type;
+    using reference = Container::reference;
+    using const_reference = Container::const_reference;
 
 private:
-    // The length of the portion of the data array that contain elements
-    std::size_t length;
-    // The length of data array
-    std::size_t capacity;
-    value_type* data;
-
-    constexpr static const std::size_t DEFAULT_CAPACITY = 4;
-    
-    /**
-     * @brief Set length, capacity and allocate a raw slab of memory
-     * to the buffer
-     * 
-     * @param len the length
-     * @param cap the capacity
-     */
-    void constructor_helper(std::size_t len, std::size_t cap) {
-        length = len;
-        capacity = cap;
-        data = static_cast<T*>(::operator new(sizeof(T) * cap));
-    }
-
-    /**
-     * @brief resize the data buffer
-     * 
-     * If the new capacity is smaller than the current length,
-     * elements beyond capacity will be missing from the new data buffer
-     * 
-     * @param count the new capacity
-     */
-    void resize_buffer(std::size_t count) {
-        if (capacity == count) {
-            return;
-        }
-        std::size_t new_length = std::min(length, count);
-        std::size_t old_length = length;
-        T* old_data = data;
-        // Create a clone of the old buffer with move if it is safe
-        // Elements beyond capacity won't make into the new data buffer
-        data = safe_move_construct(data, data + new_length, count);
-        capacity = count;
-        length = new_length;
-        // old buffer must be deallocated no matter what
-        std::unique_ptr<T, deleter<T>> cleaner(old_data);
-        // Call destructor on all elements (some of which have been moved)
-        std::destroy(old_data, old_data + old_length);
-    }
-
+    Container container;
 
 public:
     /**
@@ -72,9 +29,7 @@ public:
      * 
      * Construct a new empty stack
      */
-    stack() {
-        constructor_helper(0, DEFAULT_CAPACITY);
-    }
+    stack() { }
 
     /**
      * @brief Construct a stack with default constructed elements
@@ -84,17 +39,8 @@ public:
      * 
      * @param n the size of the stack
      */
-    stack(std::size_t n) requires std::default_initializable<T> {
-        constructor_helper(n, n);
-        try {
-            // all filled elements will be destroyed when one constructor throws an exception
-            std::uninitialized_default_construct_n(data, n);
-        } catch (...) {
-            // The raw memory must be deallocated
-            ::operator delete(data);
-            throw;
-        }
-    }
+    stack(size_type n) requires std::default_initializable<T> 
+        : container(n) { }
 
     /**
      * @brief Construct a stack with copied of a given element
@@ -105,17 +51,22 @@ public:
      * @param n the length of the stack
      * @param value the element to copy
      */
-    stack(std::size_t n, const_reference value) requires std::copy_constructible<T> {
-        constructor_helper(n, n);
-        try {
-            // all filled elements will be destroyed when one constructor throws an exception
-            std::uninitialized_fill_n(data, n, value);
-        } catch (...) {
-            // The raw memory must be deallocated
-            ::operator delete(data);
-            throw;
-        }
-    }
+    stack(size_type n, const_reference value) requires std::copy_constructible<T> 
+        : container(n, value) { }
+
+    /**
+     * @brief Construct a stack by copying a container
+     * 
+     * @param container the underlying container used by the stack
+     */
+    explicit stack(const Container& container) : container(container) { }
+
+    /**
+     * @brief Construct a stack by moving a container
+     * 
+     * @param container the underlying container used by the stack
+     */
+    explicit stack(Container&& container) : container(std::move(container)) { }
 
     /**
      * @brief Copy constructor
@@ -124,16 +75,8 @@ public:
      * 
      * @param other the stack to copy from
      */
-    stack(const stack& other) requires std::copy_constructible<T> {
-        constructor_helper(other.length, other.capacity);
-        try {
-            std::uninitialized_copy(other.data, other.data + other.length, data);
-        } catch (...) {
-            // The raw memory must be deallocated
-            ::operator delete(data);
-            throw;
-        }
-    }
+    stack(const stack& other) requires std::copy_constructible<T> 
+        : container(other.container) { }
 
     /**
      * @brief Move constructor
@@ -143,11 +86,8 @@ public:
      * 
      * @param other 
      */
-    stack(stack&& other) noexcept :
-        length{0},
-        capacity{0},
-        data{nullptr} {
-        swap(other);
+    stack(stack&& other) noexcept {
+        container.swap(other.container);
     }
 
     /**
@@ -158,11 +98,7 @@ public:
      * @param last the end of the range
      */
     template<class InputIt>
-    stack(InputIt first, InputIt last) : stack() {
-        for (auto it = first; it != last; ++it) {
-            push(*it);
-        }
-    }
+    stack(InputIt first, InputIt last) : container(first, last) { }
 
     /**
      * @brief Construct a new stack object from an initializer list
@@ -171,19 +107,7 @@ public:
      * 
      * @param list the initializer list
      */
-    stack(std::initializer_list<value_type> list) : stack(list.begin(), list.end()) {}
-
-    /**
-     * @brief Destructor
-     * 
-     * Destroy all elements in the stack and free memory allocated to
-     * the stack
-     */
-    ~stack() {
-        // delete even if destructor throws an exception
-        std::unique_ptr<T, deleter<T> > cleaner(data);
-        std::destroy(data, data + length);
-    }
+    stack(std::initializer_list<value_type> list) : container(list) {}
 
     /**
      * @brief Assignment operator
@@ -219,24 +143,24 @@ public:
     }
 
     /**
-     * @return a reference to the last element in the stack
+     * @return a reference to the top element in the stack
      */
     reference top() const {
-        return data[length - 1];
+        return container.back();
     }
 
     /**
      * @return true if the stack is empty, false otherwise
      */
     bool empty() const noexcept {
-        return length == 0;
+        return container.empty();
     }
 
     /**
      * @return the number of elements in the stack
      */
-    size_t size() const noexcept {
-        return length;
+    size_type size() const noexcept {
+        return container.size();
     }
 
     /**
@@ -246,12 +170,7 @@ public:
      * @param value the value to copy and append
      */
     void push(const_reference value) requires std::copy_constructible<T> {
-        // If we are at capacity
-        if (length == capacity) {
-            resize_buffer(capacity * 2);
-        }
-        new(data + length) T(value);
-        ++length;
+        container.push_back(value);
     }
 
     /**
@@ -262,12 +181,7 @@ public:
      * @param value the value to move from
      */
     void push(value_type&& value) requires std::move_constructible<T> {
-        // If we are at capacity
-        if (length == capacity) {
-            resize_buffer(capacity * 2);
-        }
-        new(data + length) T(std::move(value));
-        ++length;
+        container.push_back(std::move(value));
     }
 
     /**
@@ -280,23 +194,14 @@ public:
      */
     template<typename... Args>
     reference emplace(Args&&... args) {
-        // If we are at capacity
-        if (length == capacity) {
-            resize_buffer(capacity * 2);
-        }
-        new(data + length) T(std::forward<Args>(args)...);
-        return data[length++];
+        return container.emplace_back(std::forward<Args>(args)...);
     }
 
     /**
      * @brief Remove the last element in the stack and destroy it
      */
     void pop() {
-        --length;
-        data[length].~T();
-        if (length == capacity / 4) {
-            resize_buffer(std::max(capacity / 2, DEFAULT_CAPACITY));
-        }
+        container.pop_back();
     }
 
     /**
@@ -305,9 +210,29 @@ public:
      * @param other the stack to swap with
      */
     void swap(stack& other) noexcept {
-        std::swap(length, other.length);
-        std::swap(capacity, other.capacity);
-        std::swap(data, other.data);
+        std::swap(container, other.container);
+    }
+
+    /**
+     * @brief Check equality of two stacks
+     * 
+     * @param stack1 the first stack
+     * @param stack2 the second stack
+     * @return true if their contents are equal, false otherwise
+     */
+    friend bool operator==(const stack& stack1, const stack& stack2) noexcept requires equality_comparable<value_type> {
+        return stack1.container == stack2.container;
+    }
+
+    /**
+     * @brief Compare two stacks
+     * 
+     * @param stack1 the first stack
+     * @param stack2 the second stack
+     * @return a strong ordering comparison result
+     */
+    friend std::strong_ordering operator<=>(const stack& stack1, const stack& stack2) noexcept requires less_comparable<value_type> {
+        return stack1.container <=> stack2.container;
     }
 };
 }

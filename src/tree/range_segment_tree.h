@@ -136,16 +136,17 @@ public:
         lazy_flags = new bool[capacity];
         std::fill(lazy_flags, lazy_flags + capacity, false);
         pointer temp = static_cast<T*>(::operator new(sizeof(T) * length));
-        std::unique_ptr<T, deleter<T> > cleaner(temp);
         try {
             std::uninitialized_copy(first, last, temp);
             build(0, length, 0, temp);
         } catch (...) {
             ::operator delete(data);
             ::operator delete(lazy_data);
+            ::operator delete(temp);
             delete[] lazy_flags;
             throw;
         }
+        ::operator delete(temp);
     }
 
     /**
@@ -154,7 +155,6 @@ public:
      * Destroy all data in the segment tree and free memory allocated
      */
     ~range_segment_tree() {
-        std::unique_ptr<T, deleter<T> > data_cleaner(lazy_data);
         std::unique_ptr<bool[]> flags_cleaner(lazy_flags);
         delete[] data;
         for (std::size_t i = 0; i < length; ++i) {
@@ -162,6 +162,7 @@ public:
                 std::destroy_at(lazy_data + i);
             }
         }
+        ::operator delete(lazy_data);
     }
 
     /**

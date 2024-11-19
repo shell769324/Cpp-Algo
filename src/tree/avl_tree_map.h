@@ -1,51 +1,81 @@
 #pragma once
-#include <functional>
-#include "src/common.h"
 #include "avl_tree.h"
-#include "src/thread_pool_executor/thread_pool_executor.h"
 
 namespace algo {
-template<typename Key, typename T, typename Compare = std::less<Key> >
+template<typename Key, typename T, typename Compare = std::less<Key>, typename Allocator = std::allocator<std::pair<const Key, T> > >
 class avl_tree_map {
+private:
+    using avl_tree_type = avl_tree<Key, std::pair<const Key, T>, pair_left_accessor<Key, T>, Compare, Allocator>;
 
 public:
     using key_type = Key;
     using mapped_type = T;
     using value_type = std::pair<const Key, T>;
-    using key_compare = Compare;
-    using reference = value_type&;
-    using const_reference = const value_type&;
-    using iterator = binary_tree_iterator<value_type>;
-    using const_iterator = binary_tree_iterator<const value_type>;
-    using reverse_iterator = binary_tree_iterator<value_type, true>;
-    using const_reverse_iterator = binary_tree_iterator<const value_type, true>;
+    using size_type = typename avl_tree_type::size_type;
+    using difference_type = typename avl_tree_type::difference_type;
+    using key_compare = typename avl_tree_type::key_compare;
+    using allocator_type = typename avl_tree_type::allocator_type;
+    using reference = typename avl_tree_type::reference;
+    using const_reference = typename avl_tree_type::const_reference;
+    using pointer = typename avl_tree_type::pointer;
+    using const_pointer = typename avl_tree_type::const_pointer;
+    using iterator = typename avl_tree_type::iterator;
+    using const_iterator = typename avl_tree_type::const_iterator;
+    using reverse_iterator = typename avl_tree_type::reverse_iterator;
+    using const_reverse_iterator = typename avl_tree_type::const_reverse_iterator;
+    using node_type = typename avl_tree_type::node_type;
+
 
 private:
-    using avl_tree_type = avl_tree<key_type, value_type, pair_left_accessor<key_type, mapped_type>, Compare>;
     avl_tree_type tree;
 
 public:
-    
     /**
-     * @brief Construct an empty avl tree map with default comparator
+     * @brief Construct an empty avl tree map with the default comparator
      */
     avl_tree_map() = default;
 
     /**
-     * @brief Construct an empty avl tree map with a given comparator
+     * @brief Construct an empty avl tree map with a comparator and an optional allocator
      * 
      * @param comp the key comparator used by the map
-     *             will be copy constructed
+     * @param allocator the allocator to construct and destroy key value pairs
      */
-    avl_tree_map(const Compare& comp) : tree(comp) { }
+    explicit avl_tree_map(const Compare& comp, const Allocator& allocator = Allocator()) : tree(comp, allocator) { }
 
     /**
-     * @brief Construct an empty avl tree map with a given comparator
+     * @brief Construct an empty avl tree map with an allocator
      * 
-     * @param comp the key comparator used by the tree
-     *             will be move constructed
+     * @param allocator the allocator to construct and destroy key value pairs
      */
-    avl_tree_map(Compare&& comp) : tree(comp) { }
+    explicit avl_tree_map(const Allocator& allocator) : tree(Compare(), allocator) { }
+
+    /**
+     * @brief Construct a new avl tree map from a range with an optional comparator and an optional allocator
+     * 
+     * @tparam InputIt the type of the iterators that define the range
+     * @param first iterator to the first element in the range
+     * @param last iterator to one past the last element in the range
+     * @param comp the key comparator used by the map
+     * @param allocator the allocator to construct and destroy key value pairs
+     */
+    template<std::input_iterator InputIt>
+    avl_tree_map(InputIt first, InputIt last, 
+                 const Compare& comp = Compare(), 
+                 const Allocator& allocator = Allocator())
+        : tree(first, last, comp, allocator) { }
+    
+    /**
+     * @brief Construct a new avl tree map from a range with an allocator
+     * 
+     * @tparam InputIt the type of the iterators that define the range
+     * @param first iterator to the first element in the range
+     * @param last iterator to one past the last element in the range
+     * @param allocator the allocator to construct and destroy key value pairs
+     */
+    template<std::input_iterator InputIt>
+    avl_tree_map(InputIt first, InputIt last, const Allocator& allocator)
+        : tree(first, last, Compare(), allocator) { }
 
     /**
      * @brief Construct a copy of another avl tree map
@@ -57,7 +87,16 @@ public:
     avl_tree_map(const avl_tree_map& other) = default;
 
     /**
-     * @brief Construct a copy of another avl tree map
+     * @brief Construct a copy of another avl tree map and an allocator
+     * 
+     * @param other the map to copy from
+     * @param allocator the allocator to construct and destroy key value pairs
+     */
+    avl_tree_map(const avl_tree_map& other, const Allocator& allocator)
+        : tree(other.tree, allocator) { }
+
+    /**
+     * @brief Construct a copy of another avl tree map by move
      * 
      * Move constructor
      * 
@@ -66,9 +105,13 @@ public:
     avl_tree_map(avl_tree_map&& other) = default;
 
     /**
-     * @brief Destroy the avl tree map
+     * @brief Construct a copy of another avl tree map and an allocator by move
+     * 
+     * @param other the map to move from
+     * @param allocator the allocator to construct and destroy key value pairs
      */
-    ~avl_tree_map() noexcept { } 
+    avl_tree_map(avl_tree_map&& other, const Allocator& allocator)
+        : tree(std::move(other.tree), allocator) { }
 
     /**
      * @brief Copy assignment operator
@@ -98,15 +141,10 @@ public:
     }
 
     /**
-     * @brief Construct a new avl tree map from a range
-     * 
-     * @tparam InputIt the type of the iterators that define the range
-     * @param first iterator to the first element in the range
-     * @param last iterator to one past the last element in the range
+     * @brief Get a copy of the associated allocator
      */
-    template<std::input_iterator InputIt>
-    avl_tree_map(InputIt first, InputIt last) : avl_tree_map() {
-        insert(first, last);
+    allocator_type get_allocator() const noexcept {
+        return tree.get_allocator();
     }
 
     /**
@@ -255,8 +293,8 @@ public:
     /**
      * @brief Test if this map has no elements
      */
-    [[nodiscard]] bool is_empty() const noexcept {
-        return tree.is_empty();
+    [[nodiscard]] bool empty() const noexcept {
+        return tree.empty();
     }
 
     /**
@@ -437,6 +475,28 @@ public:
     void swap(avl_tree_map& other) noexcept(std::is_nothrow_swappable_v<Compare>) {
         tree.swap(other.tree);
     }
+
+    /**
+     * @brief Check equality of two avl tree maps
+     * 
+     * @param map1 the first avl tree map
+     * @param map2 the second avl tree map
+     * @return true if their contents are equal, false otherwise
+     */
+    friend bool operator==(const avl_tree_map& map1, const avl_tree_map& map2) noexcept requires equality_comparable<value_type> {
+        return map1.tree == map2.tree;
+    }
+
+    /**
+     * @brief Compare two avl tree maps
+     * 
+     * @param map1 the first avl tree map
+     * @param map2 the second avl tree map
+     * @return a strong ordering comparison result
+     */
+    friend std::strong_ordering operator<=>(const avl_tree_map& map1, const avl_tree_map& map2) noexcept requires less_comparable<value_type> {
+        return map1.tree <=> map2.tree;
+    }
     
     /**
      * @brief Get the iterator to a key value pair given its key
@@ -471,27 +531,27 @@ public:
     }
 
     /**
-     * @brief Get the iterator to a key value pair that has the
-     *        greatest key less than or equal to a given key
+     * @brief Get the iterator to a key value pair that has the smallest element greater 
+     *        than a given key
      * 
      * @param key the key to query
      * @return an iterator to such key value pair if it exists
      *         an iterator equivalent to end() otherwise
      */
-    iterator max_leq(const key_type& key) {
-        return tree.max_leq(key);
+    iterator upper_bound(const key_type& key) {
+        return tree.upper_bound(key);
     }
 
     /**
-     * @brief Get the iterator to a key value pair that has the
-     *        greatest key less than or equal to a given key
+     * @brief Get the const iterator to a key value pair that has the smallest element greater 
+     *        than a given key
      * 
      * @param key the key to query
      * @return a const iterator to such key value pair if it exists
      *         a const iterator equivalent to end() otherwise
      */
-    const_iterator max_leq(const key_type& key) const {
-        return tree.max_leq(key);
+    const_iterator upper_bound(const key_type& key) const {
+        return tree.upper_bound(key);
     }
 
     /**
@@ -502,8 +562,8 @@ public:
      * @return an iterator to such key value pair if it exists
      *         an iterator equivalent to end() otherwise
      */
-    iterator min_geq(const key_type& key) {
-        return tree.min_geq(key);
+    iterator lower_bound(const key_type& key) {
+        return tree.lower_bound(key);
     }
 
     /**
@@ -514,8 +574,8 @@ public:
      * @return a const iterator to such key value pair if it exists
      *         a const iterator equivalent to end() otherwise
      */
-    const_iterator min_geq(const key_type& key) const {
-        return tree.min_geq(key);
+    const_iterator lower_bound(const key_type& key) const {
+        return tree.lower_bound(key);
     }
 
     /**
@@ -587,12 +647,12 @@ public:
      * @brief Get the key comparison object
      */
     key_compare key_comp() const {
-        return tree.get_comparator();
+        return tree.key_comp();
     }
 
     // For testing purpose
-    bool is_valid() const noexcept {
-        return tree.is_valid();
+    bool __is_valid() const noexcept {
+        return tree.__is_valid();
     }
 };
 }
