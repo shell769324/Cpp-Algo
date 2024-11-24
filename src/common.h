@@ -74,40 +74,10 @@ public:
     void operator()(T* memory) {
         alloc_traits::deallocate(allocator, memory, length);
     }
-};
 
-/**
- * @brief object destroyer and memory deallocator
- * 
- * destroy objects and free the memory
- * 
- * @tparam T the type of the underlying data
- * @tparam Allocator the type of the allocator to deallocate memory
- */
-template<typename T, typename Allocator>
-class safe_move_construct_deleter {
-public:
-    using alloc_traits = std::allocator_traits<Allocator>;
-    using size_type = alloc_traits::size_type;
-
-private:
-    size_type length;
-    Allocator& allocator;
-
-public:
-    safe_move_construct_deleter(size_type length, Allocator& allocator) : 
-        length(length), allocator(allocator) { }
-
-    safe_move_construct_deleter(const safe_move_construct_deleter& other) noexcept : 
-        safe_move_construct_deleter(other.length, other.allocator) { }
-
-    safe_move_construct_deleter(safe_move_construct_deleter&& other) noexcept : 
-        safe_move_construct_deleter(other.length, other.allocator) { }
-
-    void operator()(T* memory) {
-        std::destroy(memory, memory + length);
-        alloc_traits::deallocate(allocator, memory, length);
-    };
+    size_type size() const noexcept {
+        return length;
+    }
 };
 
 /**
@@ -167,6 +137,11 @@ NoThrowForwardIt try_uninitialized_move(InputIt first, InputIt last, NoThrowForw
     }
 }
 
+template<typename T>
+struct try_move_return {
+    using type = std::conditional_t<std::is_move_assignable_v<T>, T&&, const T&>;
+};
+
 
 /**
  * @brief Replace the content of an object at a given address with another object
@@ -177,12 +152,8 @@ NoThrowForwardIt try_uninitialized_move(InputIt first, InputIt last, NoThrowForw
  * @param value the object to assigned from
  */
 template<typename T>
-void try_move(T* pos, T& value) {
-    if constexpr (std::is_move_assignable_v<T>) {
-        *pos = std::move(value);
-    } else {
-        *pos = value;
-    }
+try_move_return<T>::type try_move(T& value) {
+    return std::move(value);
 }
 
 /**
@@ -190,9 +161,8 @@ void try_move(T* pos, T& value) {
  *      to be an rvalue type
  */
 template<typename T>
-void try_move(T* pos, T&& value) {
-    // Call the lvalue version
-    try_move(pos, value);
+try_move_return<T>::type try_move(T&& value) {
+    return try_move(value);
 }
 
 
@@ -276,7 +246,7 @@ public:
 };
 
 template<typename Container>
-bool container_equals(const Container& container1, const Container& container2) noexcept requires equality_comparable<typename Container::value_type> {
+bool container_equals(const Container& container1, const Container& container2) requires equality_comparable<typename Container::value_type> {
     if (container1.size() != container2.size()) {
         return false;
     }
@@ -290,7 +260,7 @@ bool container_equals(const Container& container1, const Container& container2) 
 }
 
 template<typename Container>
-std::strong_ordering container_three_way_comparison(const Container& container1, const Container& container2) noexcept requires less_comparable<typename Container::value_type> {
+std::strong_ordering container_three_way_comparison(const Container& container1, const Container& container2) requires less_comparable<typename Container::value_type> {
     using const_iterator = typename Container::const_iterator;
     for (const_iterator it1 = container1.cbegin(), it2 = container2.cbegin(); it1 != container1.cend() && it2 != container2.cend(); ++it1, ++it2) {
         if (*it1 < *it2) {

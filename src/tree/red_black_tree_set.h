@@ -373,7 +373,7 @@ public:
      * @param set2 the second red black tree set
      * @return true if their contents are equal, false otherwise
      */
-    friend bool operator==(const red_black_tree_set& set1, const red_black_tree_set& set2) noexcept requires equality_comparable<value_type> {
+    friend bool operator==(const red_black_tree_set& set1, const red_black_tree_set& set2) requires equality_comparable<value_type> {
         return set1.tree == set2.tree;
     }
 
@@ -384,7 +384,7 @@ public:
      * @param set2 the second red black tree set
      * @return a strong ordering comparison result
      */
-    friend std::strong_ordering operator<=>(const red_black_tree_set& set1, const red_black_tree_set& set2) noexcept requires less_comparable<value_type> {
+    friend std::strong_ordering operator<=>(const red_black_tree_set& set1, const red_black_tree_set& set2) requires less_comparable<value_type> {
         return set1.tree <=> set2.tree;
     }
     

@@ -23,7 +23,7 @@ unsigned long long MAGIC = 0xdeadffffeeeebeef;
 
 
 constructor_stub::constructor_stub() {
-    id = counter++;
+    id = 0;
     uid = std::rand();
     if (magic == MAGIC) {
         throw std::runtime_error(std::format("id {} stub was not correctly destructed", id));
@@ -92,6 +92,10 @@ bool operator==(const constructor_stub& stub1, const constructor_stub& stub2) no
     return stub1.id == stub2.id;
 }
 
+constructor_stub operator+(const constructor_stub& stub1, const constructor_stub& stub2) {
+    return constructor_stub(stub1.id + stub2.id);
+}
+
 std::strong_ordering operator<=>(const constructor_stub& stub1, const constructor_stub& stub2) noexcept {
     return stub1.id <=> stub2.id;
 }
@@ -117,6 +121,14 @@ constructor_stub::~constructor_stub() noexcept {
 
 bool constructor_stub::is_valid() noexcept {
     return magic == MAGIC;
+}
+
+constructor_stub constructor_stub_max::operator()(const constructor_stub& stub1, const constructor_stub& stub2) const noexcept {
+    return std::max(stub1, stub2);
+}
+
+constructor_stub constructor_stub_min::operator()(const constructor_stub& stub1, const constructor_stub& stub2) const noexcept {
+    return std::min(stub1, stub2);
 }
 
 }

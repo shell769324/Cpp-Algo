@@ -99,10 +99,10 @@ private:
             resize_buffer(new_length * 2);
         }
         difference_type dest_left_bound = idx + distance;
-        for (T* to = data + new_length - 1; to >= data + dest_left_bound; to--) {
+        for (T* to = data + new_length - 1; to >= data + dest_left_bound; --to) {
             T* from = to - distance;
             if (to - data < (long int) length) {
-                try_move(to, *from);
+                *to = try_move(*from);
             } else {
                 try_uninitialized_move(to, *from, allocator);
             }
@@ -285,6 +285,9 @@ public:
      * the vector
      */
     ~vector() noexcept {
+        if (data == nullptr) {
+            return;
+        }
         destroy(data, data + length, allocator);
         alloc_traits::deallocate(allocator, data, capacity);
     }
@@ -717,7 +720,7 @@ public:
      * @param vec2 the second vector
      * @return true if their contents are equal, false otherwise
      */
-    friend bool operator==(const vector& vec1, const vector& vec2) noexcept requires equality_comparable<value_type> {
+    friend bool operator==(const vector& vec1, const vector& vec2) requires equality_comparable<value_type> {
         return container_equals(vec1, vec2);
     }
 
@@ -728,7 +731,7 @@ public:
      * @param vec2 the second vector
      * @return a strong ordering comparison result
      */
-    friend std::strong_ordering operator<=>(const vector& vec1, const vector& vec2) noexcept requires less_comparable<value_type> {
+    friend std::strong_ordering operator<=>(const vector& vec1, const vector& vec2) requires less_comparable<value_type> {
         return container_three_way_comparison(vec1, vec2);
     }
 

@@ -24,9 +24,7 @@ file(GLOB_RECURSE TEST_SOURCES LIST_DIRECTORIES false
     tree/red_black_tree_test.cpp
     tree/red_black_tree_set_test.cpp
     tree/red_black_tree_map_test.cpp
-    tree/binary_indexed_tree_test.cpp
-    tree/segment_tree_test.cpp
-    tree/range_segment_tree_test.cpp
+    range_query_tree/*
     thread_pool_executor/thread_pool_executor_test.cpp
     main.cpp)
 

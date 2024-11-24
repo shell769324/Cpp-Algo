@@ -779,7 +779,7 @@ public:
      * 
      * The boolean is true if insertion succeeded, namely the value is not a duplicate, false otherwise
      */
-    std::pair<iterator, bool> insert(const value_type& value) {
+    std::pair<iterator, bool> insert(const value_type& value) requires std::copy_constructible<value_type> {
         std::pair<node_type*, char> res = get_insertion_parent(key_of(value));
         if (res.second & EXISTS) {
             return std::make_pair(iterator(res.first), false);
@@ -801,7 +801,7 @@ public:
      * 
      * The boolean is true if insertion succeeded, namely the value is not a duplicate, false otherwise
      */
-    std::pair<iterator, bool> insert(value_type&& value) {
+    std::pair<iterator, bool> insert(value_type&& value) requires std::move_constructible<value_type> {
         std::pair<node_type*, char> res = get_insertion_parent(key_of(value));
         if (res.second & EXISTS) {
             return std::make_pair(iterator(res.first), false);

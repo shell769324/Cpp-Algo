@@ -1429,7 +1429,7 @@ public:
      * @param deque2 the second deque
      * @return true if their contents are equal, false otherwise
      */
-    friend bool operator==(const deque& deque1, const deque& deque2) noexcept requires equality_comparable<value_type> {
+    friend bool operator==(const deque& deque1, const deque& deque2) requires equality_comparable<value_type> {
         return container_equals(deque1, deque2);
     }
 
@@ -1440,7 +1440,7 @@ public:
      * @param deque2 the second deque
      * @return a strong ordering comparison result
      */
-    friend std::strong_ordering operator<=>(const deque& deque1, const deque& deque2) noexcept requires less_comparable<value_type> {
+    friend std::strong_ordering operator<=>(const deque& deque1, const deque& deque2) requires less_comparable<value_type> {
         return container_three_way_comparison(deque1, deque2);
     }
 

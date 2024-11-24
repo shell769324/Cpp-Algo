@@ -483,7 +483,7 @@ public:
      * @param map2 the second avl tree map
      * @return true if their contents are equal, false otherwise
      */
-    friend bool operator==(const avl_tree_map& map1, const avl_tree_map& map2) noexcept requires equality_comparable<value_type> {
+    friend bool operator==(const avl_tree_map& map1, const avl_tree_map& map2) requires equality_comparable<value_type> {
         return map1.tree == map2.tree;
     }
 
@@ -494,7 +494,7 @@ public:
      * @param map2 the second avl tree map
      * @return a strong ordering comparison result
      */
-    friend std::strong_ordering operator<=>(const avl_tree_map& map1, const avl_tree_map& map2) noexcept requires less_comparable<value_type> {
+    friend std::strong_ordering operator<=>(const avl_tree_map& map1, const avl_tree_map& map2) requires less_comparable<value_type> {
         return map1.tree <=> map2.tree;
     }
     

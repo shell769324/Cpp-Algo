@@ -17,13 +17,12 @@ namespace algo {
  * @tparam Operator an associative binary operator of type T * T -> T
  * @tparam InverseOperator the inverse of the operator.
  *         Denote the operator as f, the inverse operator as f'. They satisfy
- *         f'(<A, true>, f(A, B)) = B
- *         f'(<B, false>, f(A, B)) = A
+ *         f'(A, f(A, B)) = B
  *         where A, B are any value of type T
  * @tparam Allocator the allocator to construct and destroy elements.
  */
 template <typename T, typename Operator, typename InverseOperator, typename Allocator = std::allocator<T> >
-requires std::regular_invocable<Operator, T, T> && std::regular_invocable<InverseOperator, std::pair<T, bool>, T> && std::same_as<T, typename Allocator::value_type>
+requires std::regular_invocable<Operator, T, T> && std::regular_invocable<InverseOperator, T, T> && std::same_as<T, typename Allocator::value_type>
 class binary_indexed_tree {
 public:
     using value_type = T;
@@ -139,7 +138,7 @@ public:
      * @param identity identity value with regards to this binary operator
      */
     template<std::forward_iterator InputIt>
-    binary_indexed_tree(InputIt first, InputIt last, const Operator& op = const Operator& op = Operator(),
+    binary_indexed_tree(InputIt first, InputIt last, const Operator& op = Operator(),
                         const InverseOperator& inverseOp = InverseOperator(), T identity=T(), 
                         const Allocator& allocator = Allocator()) requires std::copy_constructible<T>
         : length(std::distance(first, last) + 1), op(op), inverse_op(inverseOp), identity(identity), allocator(allocator) {
@@ -245,23 +244,23 @@ public:
     }
 
     /**
-     * @brief Compute the cumulative sum of range [begin, end)
+     * @brief Compute the result of applying op over the range [first, last)
      * 
-     * Consider the binary representation of begin and end. Ignore the
-     * longest common prefix. Let the remaining suffixes be begin' and end'. The
-     * time complexity is O(|begin'| + |end'|), where |A| is the number
+     * Consider the binary representation of first and last. Ignore the
+     * longest common prefix. Let the remaining suffixes be first' and last'. The
+     * time complexity is O(|first'| + |last'|), where |A| is the number
      * of set bits in A.
      * 
-     * @param begin the inclusive begin of the range
-     * @param end the exclusive end of the range
-     * @return T cumulative sum of the range
+     * @param first the inclusive begin of the range
+     * @param last the exclusive end of the range
+     * @return the result of applying op over the range
      */
-    T query(std::size_t begin, std::size_t end) {
-        if (begin == end) {
+    T query(std::size_t first, std::size_t last) const {
+        if (first == last) {
             return identity;
         }
-        std::size_t begin_curr = begin;
-        std::size_t end_curr = end;
+        std::size_t begin_curr = first;
+        std::size_t end_curr = last;
         // If we want [5, 10) for example, we need to get the prefix sum of
         // [0, 4] and [0, 9] and take their difference. These in 1-indexed will
         // [1, 5] and [1, 10].
@@ -284,10 +283,10 @@ public:
                 begin_curr -= begin_curr & (-begin_curr);
             }
         }
-        if (begin == 0) {
+        if (first == 0) {
             return end_sum;
         }
-        return inverse_op(std::make_pair(begin_sum, true), end_sum);
+        return inverse_op(begin_sum, end_sum);
     }
 
     /**
@@ -324,7 +323,7 @@ public:
             for (std::size_t remain = pos - (pos & (-pos)); ((1 << last_one) & parent) == 0; remain -= remain & (-remain), ++last_one) {
                 acc = op(data[remain], acc);
             }
-            T right = inverse_op(std::make_pair(op(acc, old_val), true), data[parent]);
+            T right = inverse_op(op(acc, old_val), data[parent]);
             old_val = data[parent];
             data[parent] = op(op(acc, data[pos]), right);
             pos = parent;
@@ -368,15 +367,19 @@ public:
      * @return true if their contents are equal, false otherwise
      */
     friend bool operator==(const binary_indexed_tree& tree1, const binary_indexed_tree& tree2) requires equality_comparable<value_type> {
-        if (tree1.size() != tree2.size()) {
+        if (tree1.size() != tree2.size() || tree1.identity != tree2.identity) {
             return false;
         }
-        for (const_pointer it1 = tree1.data + 1, it1 = tree2.data + 1; 
-             it1 != tree1.data + length && it2 != tree2.data + length; ++it1, ++it2) {
+        for (const_pointer it1 = tree1.data + 1, it2 = tree2.data + 1; 
+             it1 != tree1.data + tree1.length && it2 != tree2.data + tree2.length; ++it1, ++it2) {
             if (!(*it1 == *it2)) {
                 return false;
             }
         }
+        return true;
+    }
+
+    bool __is_valid() const noexcept {
         return true;
     }
 };

@@ -56,6 +56,25 @@ NoThrowForwardIt uninitialized_copy(InputIt first, InputIt last, NoThrowForwardI
     }
 }
 
+template<std::bidirectional_iterator NoThrowBidirIt, typename Allocator>
+NoThrowBidirIt uninitialized_copy_backwards(NoThrowBidirIt first, NoThrowBidirIt last, NoThrowBidirIt d_last, Allocator& allocator) {
+    using alloc_traits = std::allocator_traits<Allocator>;
+    NoThrowBidirIt current = d_last;
+    try {
+        while (first != last) {
+            alloc_traits::construct(allocator, std::addressof(*(--current)), *(--last));
+        }
+        return current;
+    } catch (...) {
+        // Current is the pos where we failed to construct. It is guaranteed to be one smaller than d_last
+        --d_last;
+        while (current != d_last) {
+            alloc_traits::destroy(allocator, std::addressof(*d_last));
+        }
+        throw;
+    }
+}
+
 template<std::input_iterator InputIt, std::forward_iterator NoThrowForwardIt, typename Allocator>
 NoThrowForwardIt uninitialized_move(InputIt first, InputIt last, NoThrowForwardIt d_first, Allocator& allocator) {
     using alloc_traits = std::allocator_traits<Allocator>;
@@ -67,6 +86,25 @@ NoThrowForwardIt uninitialized_move(InputIt first, InputIt last, NoThrowForwardI
         return current;
     } catch (...) {
         destroy(d_first, current, allocator);
+        throw;
+    }
+}
+
+template<std::bidirectional_iterator NoThrowBidirIt, typename Allocator>
+NoThrowBidirIt uninitialized_move_backwards(NoThrowBidirIt first, NoThrowBidirIt last, NoThrowBidirIt d_last, Allocator& allocator) {
+    using alloc_traits = std::allocator_traits<Allocator>;
+    NoThrowBidirIt current = d_last;
+    try {
+        while (first != last) {
+            alloc_traits::construct(allocator, std::addressof(*(--current)), std::move(*(--last)));
+        }
+        return current;
+    } catch (...) {
+        // Current is the pos where we failed to construct. It is guaranteed to be one smaller than d_last
+        --d_last;
+        while (current != d_last) {
+            alloc_traits::destroy(allocator, std::addressof(*d_last));
+        }
         throw;
     }
 }

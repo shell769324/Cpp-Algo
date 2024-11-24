@@ -7,6 +7,7 @@
 #include <concepts>
 #include "tst/utility/constructor_stub.h"
 #include <unordered_set>
+#include <random>
 
 namespace algo {
 

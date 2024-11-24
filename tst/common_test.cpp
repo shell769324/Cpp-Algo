@@ -76,7 +76,7 @@ namespace {
 
     TEST_F(common_test, try_move_single_test) {
         constructor_stub* stub = new constructor_stub();
-        try_move(stub, constructor_stub(SPECIAL_VALUE));
+        *stub = try_move(constructor_stub(SPECIAL_VALUE));
         EXPECT_EQ(stub -> id, SPECIAL_VALUE);
         EXPECT_EQ(constructor_stub::move_assignment_operator_invocation_count, 1);
         EXPECT_EQ(constructor_stub::assignment_operator_invocation_count, 0);
@@ -85,7 +85,7 @@ namespace {
 
     TEST_F(common_test, try_move_single_copy_test) {
         copy_only_constructor_stub* stub = new copy_only_constructor_stub();
-        try_move(stub, copy_only_constructor_stub(SPECIAL_VALUE));
+        *stub = try_move(copy_only_constructor_stub(SPECIAL_VALUE));
         EXPECT_EQ(stub -> id, SPECIAL_VALUE);
         EXPECT_EQ(copy_only_constructor_stub::assignment_operator_invocation_count, 1);
         delete stub;

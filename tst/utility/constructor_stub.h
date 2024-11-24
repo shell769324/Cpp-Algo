@@ -39,6 +39,7 @@ public:
 
     friend bool operator==(const constructor_stub& stub1, const constructor_stub& stub2) noexcept;
     friend std::strong_ordering operator<=>(const constructor_stub& stub1, const constructor_stub& stub2) noexcept;
+    friend constructor_stub operator+(const constructor_stub& stub1, const constructor_stub& stub2);
 
     ~constructor_stub() noexcept;
 };
@@ -67,5 +68,13 @@ struct constructor_stub_comparator {
 
     bool reverse;
     int id;
+};
+
+struct constructor_stub_max {
+    constructor_stub operator()(const constructor_stub& stub1, const constructor_stub& stub2) const noexcept;
+};
+
+struct constructor_stub_min {
+    constructor_stub operator()(const constructor_stub& stub1, const constructor_stub& stub2) const noexcept;
 };
 }

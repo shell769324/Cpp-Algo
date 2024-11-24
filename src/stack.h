@@ -220,7 +220,7 @@ public:
      * @param stack2 the second stack
      * @return true if their contents are equal, false otherwise
      */
-    friend bool operator==(const stack& stack1, const stack& stack2) noexcept requires equality_comparable<value_type> {
+    friend bool operator==(const stack& stack1, const stack& stack2) requires equality_comparable<value_type> {
         return stack1.container == stack2.container;
     }
 
@@ -231,7 +231,7 @@ public:
      * @param stack2 the second stack
      * @return a strong ordering comparison result
      */
-    friend std::strong_ordering operator<=>(const stack& stack1, const stack& stack2) noexcept requires less_comparable<value_type> {
+    friend std::strong_ordering operator<=>(const stack& stack1, const stack& stack2) requires less_comparable<value_type> {
         return stack1.container <=> stack2.container;
     }
 };

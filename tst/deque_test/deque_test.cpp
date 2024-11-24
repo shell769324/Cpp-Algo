@@ -331,12 +331,12 @@ namespace {
     void push_back_exception_safety_tester(auto func) {
         deque_type deq;
         std::deque<constructor_stub> standard = set_up_for_back_exception(deq, func);
-        tracking_allocator<T>::set_throw(true);
+        tracking_allocator<T>::set_allocate_throw(true);
         try {
             deq.push_back(deq.back());
             FAIL();
         } catch (const std::bad_alloc&) {
-            tracking_allocator<T>::set_throw(false);
+            tracking_allocator<T>::set_allocate_throw(false);
         }
         test_deq_std_deq_operability(deq, standard);
     }
@@ -385,12 +385,12 @@ namespace {
     void push_front_exception_safety_tester(auto func) {
         deque_type deq;
         std::deque<constructor_stub> standard = set_up_for_front_exception(deq, func);
-        tracking_allocator<T>::set_throw(true);
+        tracking_allocator<T>::set_allocate_throw(true);
         try {
             deq.push_front(deq.back());
             FAIL();
         } catch (const std::bad_alloc&) {
-            tracking_allocator<T>::set_throw(false);
+            tracking_allocator<T>::set_allocate_throw(false);
         }
         test_deq_std_deq_operability(deq, standard);
     }
@@ -611,12 +611,12 @@ namespace {
 
     template<typename T>
     void insert_single_with_exception(deque_type& deq, std::size_t offset) {
-        tracking_allocator<T>::set_throw(true);
+        tracking_allocator<T>::set_allocate_throw(true);
         try {
             deq.insert(deq.begin() + offset, constructor_stub(SPECIAL_VALUE));
             FAIL();
         } catch (const std::bad_alloc&) {
-            tracking_allocator<T>::set_throw(false);
+            tracking_allocator<T>::set_allocate_throw(false);
         }
     }
 
@@ -686,12 +686,12 @@ namespace {
 
     template<typename T>
     void insert_fill_with_exception(deque_type& deq, std::size_t offset, std::size_t repeat) {
-        tracking_allocator<T>::set_throw(true);
+        tracking_allocator<T>::set_allocate_throw(true);
         try {
             deq.insert(deq.begin() + offset, repeat, constructor_stub(SPECIAL_VALUE));
             FAIL();
         } catch (const std::bad_alloc&) {
-            tracking_allocator<T>::set_throw(false);
+            tracking_allocator<T>::set_allocate_throw(false);
         }
     }
 
@@ -937,12 +937,12 @@ namespace {
 
     template<typename T>
     void insert_range_input_iterator_with_exception(deque_type& deq, std::size_t offset) {
-        tracking_allocator<T>::set_throw(true);
+        tracking_allocator<T>::set_allocate_throw(true);
         try {
             deq.insert(deq.begin() + offset, stub_iterator<constructor_stub>(0), stub_iterator<constructor_stub>(MEDIUM_LIMIT));
             FAIL();
         } catch (const std::bad_alloc&) {
-            tracking_allocator<T>::set_throw(false);
+            tracking_allocator<T>::set_allocate_throw(false);
         }
     }
 
