@@ -59,10 +59,11 @@ public:
      * @param comp the key comparator used by the map
      * @param allocator the allocator to construct and destroy key value pairs
      */
-    template<std::input_iterator InputIt>
+    template<typename InputIt>
     avl_tree_map(InputIt first, InputIt last, 
                  const Compare& comp = Compare(), 
                  const Allocator& allocator = Allocator())
+        requires conjugate_uninitialized_input_iterator<InputIt, value_type>
         : tree(first, last, comp, allocator) { }
     
     /**
@@ -73,8 +74,9 @@ public:
      * @param last iterator to one past the last element in the range
      * @param allocator the allocator to construct and destroy key value pairs
      */
-    template<std::input_iterator InputIt>
+    template<typename InputIt>
     avl_tree_map(InputIt first, InputIt last, const Allocator& allocator)
+        requires conjugate_uninitialized_input_iterator<InputIt, value_type>
         : tree(first, last, Compare(), allocator) { }
 
     /**
@@ -363,8 +365,8 @@ public:
      * @param first an iterator to the first element in the range
      * @param last an iterator to one past the last element in the range
      */
-    template <std::input_iterator InputIt>
-    void insert(InputIt first, InputIt last) {
+    template <typename InputIt>
+    void insert(InputIt first, InputIt last) requires conjugate_uninitialized_input_iterator<InputIt, value_type> {
         tree.insert(first, last);
     }
 
@@ -385,6 +387,25 @@ public:
     template <typename... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
         return tree.emplace(std::forward<Args>(args)...);
+    }
+
+    /**
+     * @brief In-place construct and insert a key value pair given the arguments
+     *        to construct it. Use an iterator as a hint for efficient insertion.
+     * 
+     * The key value pair is always constructed, regardless if the key already exists
+     * 
+     * @tparam the type of arguments to construct the key value pair
+     * @param args the arguments to construct the key value pair
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the inserted pair, or the existing one if this key already exists
+     * 
+     * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
+     */
+    template<typename... Args>
+    iterator emplace_hint(const_iterator hint, Args&&... args) {
+        return tree.emplace_hint(hint, std::forward<Args>(args)...);
     }
 
     /**
@@ -496,6 +517,16 @@ public:
      */
     friend std::strong_ordering operator<=>(const avl_tree_map& map1, const avl_tree_map& map2) requires less_comparable<value_type> {
         return map1.tree <=> map2.tree;
+    }
+
+    /**
+     * @brief count the number of occurrences of a particular key
+     * 
+     * @param key the key to query
+     * @return 1 if this key exists in this map, 0 otherwise
+     */
+    std::size_t count(const key_type& key) {
+        return tree.find(key) != tree.end() ? 1 : 0;
     }
     
     /**

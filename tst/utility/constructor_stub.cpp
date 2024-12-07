@@ -57,7 +57,7 @@ constructor_stub::constructor_stub(const constructor_stub& other) {
 
 constructor_stub::constructor_stub(constructor_stub&& other) noexcept {
     if (magic == MAGIC) {
-        std::cout << std::format("move constructor: id {} stub was not correctly destructed. Current counter {}\n", id,  counter.load());
+        throw std::runtime_error(std::format("move constructor: id {} stub was not correctly destructed. Current counter {}\n", id,  counter.load()));
     }
     id = other.id;
     uid = other.uid;
@@ -79,7 +79,7 @@ constructor_stub& constructor_stub::operator=(const constructor_stub& other) {
 
 constructor_stub& constructor_stub::operator=(constructor_stub&& other) noexcept {
     if (magic != MAGIC) {
-        std::cout << std::format("move assignment: id {} stub is not initialized yet. Current counter {}\n", id, counter.load());
+        throw std::runtime_error(std::format("move assignment: id {} stub is not initialized yet. Current counter {}\n", id, counter.load()));
     }
     id = other.id;
     uid = other.uid;
@@ -113,7 +113,7 @@ void constructor_stub::reset_constructor_destructor_counter() noexcept {
 
 constructor_stub::~constructor_stub() noexcept {
     if (magic != MAGIC) {
-        std::cout << "Inside destructor id " << id << " stub is not initialized yet\n";
+        throw std::runtime_error(std::format("Inside destructor id %s stub is not initialized yet", id));
     }
     magic = 0;
     destructor_invocation_count++;

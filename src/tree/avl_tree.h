@@ -6,6 +6,7 @@
 #include "binary_tree_node.h"
 #include "binary_tree_iterator.h"
 #include "src/common.h"
+#include "src/concepts.h"
 #include <optional>
 #include <utility>
 
@@ -213,6 +214,9 @@ public:
     using base_type::key_of;
     using base_type::comp;
     using base_type::node_allocator;
+    using base_type::sentinel;
+    using base_type::element_count;
+    using base_type::begin_node;
     using base_type::EXISTS;
     using base_type::IS_LEFT_CHILD;
     using base_type::get_insertion_parent;
@@ -223,18 +227,13 @@ public:
     using base_type::union_of;
     using base_type::intersection_of;
     using base_type::difference_of;
-
-private:
-    node_type* sentinel;
-    std::size_t element_count;
+    using base_type::update_begin_node;
 
 public:
     /**
      * @brief Construct a default empty avl tree
      */
-    avl_tree() 
-        : sentinel(node_type::construct_sentinel(node_allocator)), 
-          element_count(0) { }
+    avl_tree() { }
 
     /**
      * @brief Construct an empty avl tree with a given comparator and allocator
@@ -242,10 +241,8 @@ public:
      * @param comp the key comparator used by the tree
      * @param allocator the allocator to construct/destroy elements
      */
-    explicit avl_tree(const Compare& comp, const allocator_type& allocator) 
-        : base_type(comp, allocator), 
-          sentinel(node_type::construct_sentinel(node_allocator)), 
-          element_count(0) { }
+    explicit avl_tree(const Compare& comp, const allocator_type& allocator)
+        : base_type(comp, allocator) { }
 
     /**
      * @brief Construct a new avl tree from range
@@ -254,8 +251,9 @@ public:
      * @param first the beginning of the range
      * @param last the end of the range
      */
-    template<std::input_iterator InputIt>
-    avl_tree(InputIt first, InputIt last) : avl_tree() {
+    template<typename InputIt>
+    avl_tree(InputIt first, InputIt last) requires conjugate_uninitialized_input_iterator<InputIt, value_type>
+        : avl_tree() {
         insert(first, last);
     }
     
@@ -268,10 +266,10 @@ public:
      * @param comp the key comparator used by the tree
      * @param allocator the allocator to construct/destroy elements
      */
-    template<std::input_iterator InputIt>
+    template<typename InputIt>
     avl_tree(InputIt first, InputIt last,
              const Compare& comp, 
-             const Allocator& allocator)
+             const Allocator& allocator) requires conjugate_uninitialized_input_iterator<InputIt, value_type>
         : avl_tree(comp, allocator) {
         insert(first, last);
     }
@@ -283,14 +281,7 @@ public:
      * 
      * @param other the tree to copy from
      */
-    avl_tree(const avl_tree& other)
-        : base_type(other),
-          sentinel(node_type::construct_sentinel(node_allocator)),
-          element_count(other.element_count) {
-        if (other.sentinel -> left_child) {
-            sentinel -> link_left_child(other.sentinel-> left_child -> deep_clone(node_allocator));
-        }
-    }
+    avl_tree(const avl_tree& other) = default;
 
     /**
      * @brief Construct a copy of another avl tree with an allocator
@@ -299,14 +290,7 @@ public:
      * @param allocator the allocator to construct/destroy elements
      */
     avl_tree(const avl_tree& other, const Allocator& allocator) 
-        : base_type(other, allocator),
-          sentinel(node_type::construct_sentinel(node_allocator)),
-          element_count(other.element_count) {
-        // If the other tree is not empty, the other tree's sentinel must have a nonnull left child
-        if (other.sentinel -> left_child) {
-            sentinel -> link_left_child(other.sentinel-> left_child -> deep_clone(node_allocator));
-        }
-    }
+        : base_type(other, allocator) { }
 
     /**
      * @brief Construct a copy of another avl tree by move
@@ -315,13 +299,7 @@ public:
      * 
      * @param other the tree to move from
      */
-    avl_tree(avl_tree&& other) 
-        : base_type(std::move(other)), 
-          sentinel(other.sentinel), 
-          element_count(other.element_count) {
-        other.sentinel = nullptr;
-        other.element_count = 0;
-    }
+    avl_tree(avl_tree&& other) = default;
 
     /**
      * @brief Construct a copy of another avl tree with an allocator by move
@@ -330,12 +308,7 @@ public:
      * @param allocator the allocator to construct/destroy eleents
      */
     avl_tree(avl_tree&& other, const Allocator& allocator) 
-        : base_type(std::move(other), allocator), 
-          sentinel(other.sentinel), 
-          element_count(other.element_count) {
-        other.sentinel = nullptr;
-        other.element_count = 0;
-    }
+        : base_type(std::move(other), allocator) { }
 
     /**
      * @brief Copy assignment operator
@@ -364,227 +337,7 @@ public:
         return *this;
     }
 
-    ~avl_tree() noexcept override {
-        // If this avl tree was moved, its sentinel is null
-        if (sentinel == nullptr) {
-            return;
-        }
-        // Destroy and deallocate all nodes
-        clear();
-        base_type::node_alloc_traits::deallocate(node_allocator, sentinel, 1);
-    }
-
-    /**
-     * @brief Get a copy of the associated allocator
-     */
-    allocator_type get_allocator() const noexcept {
-        return allocator_type(node_allocator);
-    }
-
-    /**
-     * @brief Test if a tree is empty
-     */
-    bool empty() const noexcept {
-        return element_count == 0;
-    }
-
-    /**
-     * @brief Get the number of elements in the tree
-     */
-    std::size_t size() const noexcept {
-        return element_count;
-    }
-
-    /**
-     * @brief Get an iterator to the smallest element
-     */
-    iterator begin() noexcept {
-        return iterator(sentinel -> get_leftmost_descendant());
-    }
-
-    /**m
-     * @brief Get a constant iterator to the smallest element
-     */
-    const_iterator begin() const noexcept {
-        return const_iterator(sentinel -> get_leftmost_descendant());
-    }
-
-    /**
-     * @brief Get a constant iterator to the smallest element
-     */
-    const_iterator cbegin() const noexcept {
-        return const_iterator(sentinel -> get_leftmost_descendant());
-    }
-
-    /**
-     * @brief Get an iterator to one past the greatest element
-     */
-    iterator end() noexcept {
-        return iterator(sentinel);
-    }
-
-    /**
-     * @brief Get a constant iterator to one past the greatest element
-     */
-    const_iterator end() const noexcept {
-        return const_iterator(sentinel);
-    }
-
-    /**
-     * @brief Get a constant iterator to one past the greatest element
-     */
-    const_iterator cend() const noexcept {
-        return const_iterator(sentinel);
-    }
-
-    /**
-     * @brief Get an reverse iterator to the greatest element
-     */
-    reverse_iterator rbegin() noexcept {
-        if (!sentinel -> left_child) {
-            return reverse_iterator();
-        }
-        return reverse_iterator(sentinel -> left_child -> get_rightmost_descendant());
-    }
-
-    /**
-     * @brief Get a constant reverse iterator to the greatest element
-     */
-    const_reverse_iterator rbegin() const noexcept {
-        if (!sentinel -> left_child) {
-            return const_reverse_iterator();
-        }
-        return const_reverse_iterator(sentinel -> left_child -> get_rightmost_descendant());
-    }
-
-    /**
-     * @brief Get a constant reverse iterator to the greatest element
-     */
-    const_reverse_iterator crbegin() const noexcept {
-        return rbegin();
-    }
-
-    /**
-     * @brief Get a reverse iterator to one past the smallest element
-     */
-    reverse_iterator rend() noexcept {
-        return reverse_iterator();
-    }
-
-    /**
-     * @brief Get a constant reverse iterator to one past the smallest element
-     */
-    const_reverse_iterator rend() const noexcept {
-        return const_reverse_iterator();
-    }
-
-    /**
-     * @brief Get a constant reverse iterator to one past the smallest element
-     */
-    const_reverse_iterator crend() const noexcept {
-        return const_reverse_iterator();
-    }
-
-    /**
-     * @brief Remove all elements in this tree
-     */
-    void clear() noexcept {
-        if (sentinel -> left_child) {
-            sentinel -> left_child.release() -> deep_destroy(node_allocator);
-            element_count = 0;
-        }
-    }
-
-    /**
-     * @brief Get the iterator to an element given a key
-     * 
-     * @param key the key to look up
-     * @return an iterator to the element if it exists,
-     *         the end iterator otherwise
-     */
-    iterator find(const key_type& key) {
-        return iterator(std::as_const(*this).find(key));
-    }
-
-    /**
-     * @brief Get the iterator to an element given a key
-     * 
-     * @param key the key to look up
-     * @return a constant iterator to the element if it exists,
-     *         the end iterator otherwise
-     */
-    const_iterator find(const key_type& key) const {
-        node_type* res = base_type::find(sentinel -> left_child.get(), key);
-        if (!res) {
-            return cend();
-        }
-        return const_iterator(res);
-    }
-
-    /**
-     * @brief Get the iterator to the smallest element greater than
-     *        a given key
-     * 
-     * @param key the inclusive upper bound
-     * @return an iterator to such element if it exists,
-     *         the end iterator otherwise
-     */
-    iterator upper_bound(const key_type& key) {
-        return iterator(std::as_const(*this).upper_bound(key));
-    }
-
-    /**
-     * @brief Get the iterator to the smallest element greater than
-     *        a given key
-     * 
-     * @param key the inclusive upper bound
-     * @return a const iterator to such element if it exists,
-     *         the end iterator otherwise
-     */
-    const_iterator upper_bound(const key_type& key) const {
-        node_type* res = upper_bound(sentinel -> left_child.get(), key);
-        if (!res) {
-            res = sentinel;
-        }
-        return const_iterator(res);
-    }
-
-    /**
-     * @brief Get the iterator to the smallest element greater than or equal to
-     *        a given key
-     * 
-     * @param key the inclusive lower bound
-     * @return an iterator to such element if it exists,
-     *         the end iterator otherwise
-     */
-    iterator lower_bound(const key_type& key) {
-        return iterator(std::as_const(*this).lower_bound(key));
-    }
-
-    /**
-     * @brief Get the iterator to the smallest element greater than or equal to
-     *        a given key
-     * 
-     * @param key the inclusive lower bound
-     * @return a const iterator to such element if it exists,
-     *         the end iterator otherwise
-     */
-    const_iterator lower_bound(const key_type& key) const {
-        node_type* res = lower_bound(sentinel -> left_child.get(), key);
-        if (!res) {
-            res = sentinel;
-        }
-        return const_iterator(res);
-    }
-
 private:
-    std::pair<node_type*, char> get_insertion_parent(const key_type& key) {
-        if (!sentinel -> left_child) {
-            return std::make_pair(sentinel, IS_LEFT_CHILD);
-        }
-        return get_insertion_parent(sentinel -> left_child.get(), key);
-    }
-
     /**
      * @brief Populate the height change after this node is inserted
      * 
@@ -630,13 +383,30 @@ public:
      * @param first the beginnig of the range
      * @param last the end of the range
      */
-    template<std::input_iterator InputIt>
-    void insert(InputIt first, InputIt last) {
-        for (auto it = first; it != last; ++it) {
+    template<typename InputIt>
+    void insert(InputIt first, InputIt last) requires conjugate_uninitialized_input_iterator<InputIt, value_type> {
+        for (InputIt& it = first; it != last; ++it) {
             insert(*it);
         }
     }
 
+private:
+    template<typename... Args>
+    std::pair<iterator, bool> insert_helper(const key_type& key, Args&&... args) {
+        std::pair<node_type*, char> res = get_insertion_parent(key);
+        if (res.second & EXISTS) {
+            return std::make_pair(iterator(res.first), false);
+        }
+        node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
+        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
+        // Populate ancestors' heights and rebalance
+        adjust_after_insertion(new_node);
+        update_begin_node(new_node);
+        ++element_count;
+        return std::make_pair(iterator(new_node), true);
+    }
+
+public:
     /**
      * @brief Insert a single value to this tree
      * 
@@ -647,17 +417,8 @@ public:
      * 
      * The boolean is true if insertion succeeded, namely the value is not a duplicate, false otherwise
      */
-    std::pair<iterator, bool> insert(const value_type& value) requires std::copy_constructible<value_type> {
-        std::pair<node_type*, char> res = get_insertion_parent(key_of(value));
-        if (res.second & EXISTS) {
-            return std::make_pair(iterator(res.first), false);
-        }
-        node_type* new_node = node_type::construct(node_allocator, value);
-        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-        // Populate ancestors' heights and rebalance
-        adjust_after_insertion(new_node);
-        ++element_count;
-        return std::make_pair(iterator(new_node), true);
+    std::pair<iterator, bool> insert(const value_type& value) requires std::is_copy_constructible_v<value_type> {
+        return insert_helper(key_of(value), value);
     }
 
     /**
@@ -671,18 +432,10 @@ public:
      * The boolean is true if insertion succeeded, namely the value is not a duplicate, false otherwise
      */
     std::pair<iterator, bool> insert(value_type&& value) requires std::move_constructible<value_type> {
-        std::pair<node_type*, char> res = get_insertion_parent(key_of(value));
-        if (res.second & EXISTS) {
-            return std::make_pair(iterator(res.first), false);
-        }
-        node_type* new_node = node_type::construct(node_allocator, std::move(value));
-        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-        // Populate ancestors' heights and rebalance
-        adjust_after_insertion(new_node);
-        ++element_count;
-        return std::make_pair(iterator(new_node), true);
+        return insert_helper(key_of(value), std::move(value));
     }
 
+public:
     /**
      * @brief In-place construct and insert a value to this tree
      * 
@@ -708,8 +461,37 @@ public:
 
         // Populate ancestors' heights and rebalance
         adjust_after_insertion(new_node);
+        update_begin_node(new_node);
         ++element_count;
         return std::make_pair(iterator(new_node), true);
+    }
+
+    /**
+     * @brief In-place construct and insert a value to this tree
+     * 
+     * A value is always constructed regardless if it already exists in the tree
+     * 
+     * @tparam Args the type of arguments to construct the value
+     * @param hint an iterator that is close to the insertion location of the new value. If the iterator
+     *             is far from insertion location, the value is emplaced as if emplace(std::forward<Args>(args)...)
+     * @param args the arguments to construct the value
+     * @return an iterator to the inserted element, or to the element that prevented the insertion
+     */
+    template<typename... Args>
+    iterator emplace_hint(const_iterator hint, Args&&... args) {
+        node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
+        std::pair<node_type*, char> res = get_insertion_parent(hint, key_of(new_node -> value));
+        if (res.second & EXISTS) {
+            new_node -> destroy(node_allocator);
+            return iterator(res.first);
+        }
+        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
+
+        // Populate ancestors' heights and rebalance
+        adjust_after_insertion(new_node);
+        update_begin_node(new_node);
+        ++element_count;
+        return iterator(new_node);
     }
 
     /**
@@ -718,6 +500,7 @@ public:
      * A value is constructed only if it doesn't exist in the tree
      * 
      * @tparam Args the type of arguments to construct the value
+     * @param key the key associated with the new value to insert
      * @param args the arguments to construct the value
      * @return a pair of an iterator and a boolean
      * 
@@ -727,17 +510,7 @@ public:
      */
     template<typename... Args>
     std::pair<iterator, bool> try_emplace(const key_type& key, Args&&... args) {
-        std::pair<node_type*, char> res = get_insertion_parent(key);
-        if (res.second & EXISTS) {
-            return std::make_pair(iterator(res.first), false);
-        }
-        node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
-        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-
-        // Populate ancestors' heights and rebalance
-        adjust_after_insertion(new_node);
-        ++element_count;
-        return std::make_pair(iterator(new_node), true);
+        return insert_helper(key, std::forward<Args>(args)...);
     }
 
 private:
@@ -869,8 +642,8 @@ public:
      * @return true if removal happened (i.e. the key was found), false otherwise
      */
     bool erase(const key_type& key) {
-        iterator it = find(key);
-        if (it == end()) {
+        iterator it = this -> find(key);
+        if (it == this -> end()) {
             return false;
         }
         erase(it);
@@ -884,7 +657,11 @@ public:
      * @return the iterator following the removed element
      */
     iterator erase(iterator pos) {
+        bool was_begin_node = pos.node == begin_node;
         iterator res = extract(pos, sentinel);
+        if (was_begin_node) {
+            begin_node = res.node;
+        }
         (static_cast<node_type*>(pos.node)) -> destroy(node_allocator);
         --element_count;
         return res;
@@ -922,9 +699,7 @@ public:
      * @param other the other avl tree to swap from
      */
     void swap(avl_tree& other) noexcept(std::is_nothrow_swappable_v<Compare>) {
-        std::swap(static_cast<base_type&>(*this), static_cast<base_type&>(other));
-        std::swap(sentinel, other.sentinel);
-        std::swap(element_count, other.element_count);
+        static_cast<base_type&>(*this).swap(static_cast<base_type&>(other));
     }
 
     /**
@@ -1224,6 +999,7 @@ public:
             res = tree1.union_of(unique_ptr_type(root1), unique_ptr_type(root2), resolver);
         }
         tree1.sentinel -> link_left_child(std::move(res));
+        tree1.begin_node = tree1.sentinel -> get_leftmost_descendant();
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
         return tree1;
     }
@@ -1275,6 +1051,7 @@ public:
             res = tree1.intersection_of(unique_ptr_type(root1), unique_ptr_type(root2), resolver);
         }
         tree1.sentinel -> safe_link_left_child(std::move(res));
+        tree1.begin_node = tree1.sentinel -> get_leftmost_descendant();
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
         return tree1;
     }
@@ -1321,6 +1098,7 @@ public:
             res = tree1.difference_of(unique_ptr_type(root1), unique_ptr_type(root2));
         }
         tree1.sentinel -> safe_link_left_child(std::move(res));
+        tree1.begin_node = tree1.sentinel -> get_leftmost_descendant();
         tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
         return tree1;
     }
@@ -1375,8 +1153,12 @@ private:
 
 public:
     bool __is_valid() const noexcept {
-        return __is_height_correct(sentinel -> left_child.get()) & sentinel -> __is_parent_child_link_mutual() &
-                __is_inorder(cbegin(), cend()) & __is_size_correct(sentinel -> left_child.get(), element_count);
+        node_type* smallest = sentinel -> get_leftmost_descendant();
+        return __is_height_correct(sentinel -> left_child.get()) 
+            & sentinel -> __is_parent_child_link_mutual() 
+            & __is_inorder(const_iterator(smallest), this -> cend()) 
+            & __is_size_correct(sentinel -> left_child.get(), element_count)
+            & this -> __is_begin_node_correct();
     }
 };
 }

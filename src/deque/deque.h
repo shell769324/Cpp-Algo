@@ -154,7 +154,7 @@ public:
      * @param value the value to copy
      * @param allocator the allocator to allocate and deallocate raw memory
      */
-    deque(size_type n, const_reference value, const allocator_type& allocator = allocator_type()) requires std::copy_constructible<T> 
+    deque(size_type n, const_reference value, const allocator_type& allocator = allocator_type()) requires std::is_copy_constructible_v<T> 
         : allocator(allocator),
           pointer_allocator(allocator) {
         auto filler = [&value, this](T* p, size_type n) {
@@ -171,9 +171,9 @@ public:
      * @param last the exclusive end of the range
      * @param allocator the allocator to allocate and deallocate raw memory
      */
-    template<std::input_iterator InputIt>
+    template<typename InputIt>
     deque(InputIt first, InputIt last, const allocator_type& allocator = allocator_type()) 
-        requires std::copy_constructible<T> : deque(allocator) {
+        requires conjugate_uninitialized_input_iterator<InputIt, T> : deque(allocator) {
         insert(begin_iterator, first, last);
     }
 
@@ -213,7 +213,7 @@ public:
      * 
      * @param other the other deque to copy
      */
-    deque(const deque& other) requires std::copy_constructible<T> 
+    deque(const deque& other) requires std::is_copy_constructible_v<T> 
         : num_chunks(other.num_chunks),
           num_elements(other.num_elements),
           allocator(other.allocator),
@@ -227,7 +227,7 @@ public:
      * @param other the other deque to copy
      * @param allocator the allocator to allocate and deallocate raw memory 
      */
-    deque(const deque& other, const std::type_identity_t<Allocator>& allocator) requires std::copy_constructible<T> 
+    deque(const deque& other, const std::type_identity_t<Allocator>& allocator) requires std::is_copy_constructible_v<T> 
         : num_chunks(other.num_chunks),
           num_elements(other.num_elements),
           allocator(allocator),
@@ -293,7 +293,7 @@ public:
      * @param other the deque to copy
      * @return a reference to self
      */
-    deque& operator=(const deque& other) requires std::copy_constructible<T> {
+    deque& operator=(const deque& other) requires std::is_copy_constructible_v<T> {
         if (this == &other) {
             return *this;
         }
@@ -691,7 +691,7 @@ public:
      * 
      * @param value the element to append
      */
-    void push_back(const_reference value) requires std::copy_constructible<T> {
+    void push_back(const_reference value) requires std::is_copy_constructible_v<T> {
         allocate_tail_space();
         alloc_traits::construct(allocator, end_iterator.inner_pointer, value);
         ++end_iterator;
@@ -948,7 +948,7 @@ public:
      * 
      * @param value the element to append
      */
-    void push_front(const_reference value) requires std::copy_constructible<T> {
+    void push_front(const_reference value) requires std::is_copy_constructible_v<T> {
         iterator prior = allocate_front_space();
         alloc_traits::construct(allocator, prior.inner_pointer, value);
         begin_iterator = prior;
@@ -1198,7 +1198,10 @@ private:
         } else {
             insert_shift_end(iterator(pos), 1, initialized_begin, uninitialized_begin);
         }
-        *initialized_begin = T(std::forward<Args>(args)...);
+        // We have to destroy the old element and then construct a new one.
+        // Allocator aware data structure doesn't play well with assignment
+        alloc_traits::destroy(allocator, std::addressof(*initialized_begin));
+        alloc_traits::construct(allocator, std::addressof(*initialized_begin), std::forward<Args>(args)...);
         ++num_elements;
         return initialized_begin;
     }
@@ -1212,7 +1215,7 @@ public:
      * @return iterator to the inserted value
      */
     iterator insert(const_iterator pos, const_reference value)
-        requires std::copy_constructible<T> && std::is_copy_assignable_v<T> {
+        requires std::is_copy_constructible_v<T> {
         return insert_single_helper(pos, value);
     }
 
@@ -1224,7 +1227,7 @@ public:
      * @return iterator to the inserted value
      */
     iterator insert(const_iterator pos, value_type&& value)
-        requires std::move_constructible<T> && std::is_copy_assignable_v<T> {
+        requires std::move_constructible<T> {
         return insert_single_helper(pos, std::move(value));
     }
     
@@ -1236,8 +1239,7 @@ public:
      * @return iterator to the inserted value
      */
     template<typename... Args>
-    iterator emplace(const_iterator pos, Args&&... args)
-        requires std::copy_constructible<T> && std::is_copy_assignable_v<T> {
+    iterator emplace(const_iterator pos, Args&&... args) {
         return insert_single_helper(pos, std::forward<Args>(args)...);
     }
 
@@ -1250,7 +1252,7 @@ public:
      * @return iterator to the first inserted value
      */
     iterator insert(const_iterator pos, size_type count, const_reference value)
-        requires std::copy_constructible<T> && std::is_copy_assignable_v<T> {
+        requires std::is_copy_constructible_v<T> {
         if (count == 1) {
             return insert(pos, value);
         }
@@ -1281,9 +1283,9 @@ public:
      * @param last the end of the range
      * @return iterator to the first inserted value
      */
-    template<std::forward_iterator InputIt>
-    iterator insert(const_iterator pos, InputIt first, InputIt last) 
-        requires std::copy_constructible<T> && std::is_copy_assignable_v<T> {
+    template<typename ForwardIt>
+    iterator insert(const_iterator pos, ForwardIt first, ForwardIt last) 
+        requires conjugate_uninitialized_forward_iterator<ForwardIt, value_type> {
         if (first == last) {
             return iterator(pos);
         }
@@ -1320,9 +1322,9 @@ public:
      * @param last the end of the range
      * @return iterator to the first inserted value
      */
-    template<std::input_iterator InputIt>
+    template<typename InputIt>
     iterator insert(const_iterator pos, InputIt first, InputIt last)
-        requires std::copy_constructible<T> && std::is_copy_assignable_v<T> && (!std::forward_iterator<InputIt>) {
+        requires conjugate_uninitialized_input_iterator<InputIt, value_type> && (!std::forward_iterator<InputIt>) {
         if (first == last) {
             return iterator(pos);
         }
@@ -1330,11 +1332,15 @@ public:
         for (InputIt& it = first; it != last; ++it) {
             storage.push_back(*it);
         }
-        return insert(pos, storage.begin(), storage.end());
+        if constexpr (std::is_move_constructible_v<value_type>) {
+            return insert(pos, std::make_move_iterator(storage.begin()), std::make_move_iterator(storage.end()));
+        } else {
+            return insert(pos, storage.begin(), storage.end());
+        }
     }
 
 private:
-    void erase_shift_begin(iterator first, iterator last) requires std::is_copy_assignable_v<T> {
+    void erase_shift_begin(iterator first, iterator last) {
         if constexpr(std::is_move_assignable_v<T>) {
             std::move_backward(begin_iterator, first, last);
         } else {

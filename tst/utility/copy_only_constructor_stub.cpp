@@ -51,4 +51,8 @@ copy_only_constructor_stub::~copy_only_constructor_stub() noexcept {
 bool operator==(const copy_only_constructor_stub& a, const copy_only_constructor_stub& b) {
     return a.id == b.id;
 }
+
+std::strong_ordering operator<=>(const copy_only_constructor_stub& a, const copy_only_constructor_stub& b) {
+    return a.id <=> b.id;
+}
 }

@@ -5,20 +5,24 @@
 #include "tst/utility/stub_iterator.h"
 #include "tst/utility/tracking_allocator.h"
 #include "tst/utility/common.h"
+#include "tst/utility/move_only_constructor_stub.h"
+#include "tst/utility/copy_only_constructor_stub.h"
+#include "tst/utility/construction_destruction_tracker.h"
 
 namespace {
     using namespace algo;
     class deque_test : public ::testing::Test {
+    public:
+        construction_destruction_tracker tracker;
     protected:
         virtual void SetUp() {
-            tracking_allocator<constructor_stub>::reset();
+            tracker.reset();
             tracking_allocator<constructor_stub*>::reset();
-            constructor_stub::reset_constructor_destructor_counter();
+
         }
 
         virtual void TearDown() {
-            EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
-            tracking_allocator<constructor_stub>::check();
+            tracker.check();
             tracking_allocator<constructor_stub*>::check();
         }
     };
@@ -101,13 +105,17 @@ namespace {
     }
 
     TEST_F(deque_test, default_fill_constructor_test) {
+        this -> tracker.mark();
         deque_type deq(MEDIUM_LIMIT, allocator);
+        this -> tracker.check_marked();
         default_fill_constructor_test_helper();
         is_allocator_correct(deq);
     }
 
     TEST_F(deque_test, default_fill_constructor_optional_test) {
+        this -> tracker.mark();
         deque_type deq(MEDIUM_LIMIT);
+        this -> tracker.check_marked();
         default_fill_constructor_test_helper();
     }
 
@@ -123,19 +131,27 @@ namespace {
     }
 
     TEST_F(deque_test, fill_constructor_test) {
-        deque_type deq(MEDIUM_LIMIT, constructor_stub(SPECIAL_VALUE), allocator);
+        constructor_stub stub(SPECIAL_VALUE);
+        this -> tracker.mark();
+        deque_type deq(MEDIUM_LIMIT, stub, allocator);
+        this -> tracker.check_marked();
         fill_constructor_test_helper(deq);
         is_allocator_correct(deq);
     }
 
     TEST_F(deque_test, fill_constructor_optional_test) {
-        deque_type deq(MEDIUM_LIMIT, constructor_stub(SPECIAL_VALUE));
+        constructor_stub stub(SPECIAL_VALUE);
+        this -> tracker.mark();
+        deque_type deq(MEDIUM_LIMIT, stub);
+        this -> tracker.check_marked();
         fill_constructor_test_helper(deq);
     }
 
     TEST_F(deque_test, range_constructor_test) {
         std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        this -> tracker.mark();
         deque_type deq(stubs.begin(), stubs.end(), allocator);
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, MEDIUM_LIMIT);
         std::deque<constructor_stub> std_deq(stubs.begin(), stubs.end());
         test_deq_std_deq_equality(deq, std_deq);
@@ -144,7 +160,9 @@ namespace {
 
     TEST_F(deque_test, range_constructor_optional_test) {
         std::vector<constructor_stub> stubs = get_random_stub_vector(MEDIUM_LIMIT);
+        this -> tracker.mark();
         deque_type deq(stubs.begin(), stubs.end());
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, MEDIUM_LIMIT);
         std::deque<constructor_stub> std_deq(stubs.begin(), stubs.end());
         test_deq_std_deq_equality(deq, std_deq);
@@ -158,7 +176,9 @@ namespace {
         std::size_t stub_alloc_count = allocated<constructor_stub>;
         std::size_t chunks = 2 + deq.__get_num_chunks();
         std::size_t allocated_chunks = deq.__get_num_active_chunks();
+        this -> tracker.mark();
         deque_type deq_copy(deq);
+        this -> tracker.check_marked();
         EXPECT_EQ(copy_count + MEDIUM_LIMIT, constructor_stub::copy_constructor_invocation_count);
         EXPECT_EQ(chunk_alloc_count + chunks, allocated<constructor_stub*>);
         EXPECT_EQ(stub_alloc_count + allocated_chunks * CHUNK_SIZE<constructor_stub>, allocated<constructor_stub>);
@@ -216,7 +236,9 @@ namespace {
         deque_type deq(MEDIUM_LIMIT);
         std::deque<constructor_stub> std_deq(deq.begin(), deq.end());
         deque_type deq_copy;
+        this -> tracker.mark();
         deq_copy = deq;
+        this -> tracker.check_marked();
         test_deq_std_deq_equality(deq, std_deq);
         test_deq_std_deq_equality(deq_copy, std_deq);
     }
@@ -228,7 +250,9 @@ namespace {
         // No buffer allocated if the destination is big enough
         std::size_t alloc_count = allocated<int>;
         EXPECT_GT(alloc_count, 0);
+        this -> tracker.mark();
         deq_copy = deq;
+        this -> tracker.check_marked();
         EXPECT_EQ(alloc_count, allocated<int>);
         test_deq_std_deq_equality(deq, std_deq);
         test_deq_std_deq_equality(deq_copy, std_deq);
@@ -282,14 +306,19 @@ namespace {
     TEST_F(deque_test, push_back_copy_test) {
         deque_type deq;
         constructor_stub stub(0);
+        this -> tracker.mark();
         deq.push_back(stub);
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::constructor_invocation_count, 2);
     }
 
     TEST_F(deque_test, push_back_move_test) {
         deque_type deq;
-        deq.push_back(constructor_stub(0));
+        constructor_stub stub;
+        this -> tracker.mark();
+        deq.push_back(std::move(stub));
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::move_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::constructor_invocation_count, 2);
     }
@@ -351,7 +380,9 @@ namespace {
 
     TEST_F(deque_test, emplace_back_test) {
         deque_type deq;
+        this -> tracker.mark();
         deq.emplace_back(0);
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::id_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::constructor_invocation_count, 1);
     }
@@ -359,14 +390,19 @@ namespace {
     TEST_F(deque_test, push_front_copy_test) {
         deque_type deq;
         constructor_stub stub(0);
+        this -> tracker.mark();
         deq.push_front(stub);
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::constructor_invocation_count, 2);
     }
 
     TEST_F(deque_test, push_front_move_test) {
         deque_type deq;
-        deq.push_front(constructor_stub(0));
+        constructor_stub stub;
+        this -> tracker.mark();
+        deq.push_front(std::move(stub));
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::move_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::constructor_invocation_count, 2);
     }
@@ -405,51 +441,65 @@ namespace {
 
     TEST_F(deque_test, emplace_front_test) {
         deque_type deq;
+        this -> tracker.mark();
         deq.emplace_front(0);
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::id_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::constructor_invocation_count, 1);
     }
 
     TEST_F(deque_test, shift_left_test) {
         deque_type deq;
+        constructor_stub stub;
+        this -> tracker.mark();
         for (int i = 0; i < LIMIT; ++i) {
-            deq.push_front(constructor_stub(i));
+            deq.push_front(stub);
             deq.pop_back();
             EXPECT_EQ(deq.__get_num_active_chunks(), 0);
             EXPECT_LE(deq.__get_num_chunks(), 3);
         }
+        this -> tracker.check_marked();
     }
 
     TEST_F(deque_test, shift_left_gap_test) {
         deque_type deq;
-        deq.push_front(constructor_stub(0));
+        constructor_stub stub;
+        this -> tracker.mark();
+        deq.push_front(stub);
         for (int i = 1; i < LIMIT; ++i) {
-            deq.push_front(constructor_stub(i));
+            deq.push_front(stub);
             deq.pop_back();
             EXPECT_EQ(deq.__get_num_active_chunks(), 1);
             EXPECT_LE(deq.__get_num_chunks(), 6);
         }
+        this -> tracker.check_marked();
     }
 
     TEST_F(deque_test, shift_right_test) {
         deque_type deq;
+        constructor_stub stub;
+        this -> tracker.mark();
         for (int i = 0; i < LIMIT; ++i) {
-            deq.push_back(constructor_stub(i));
+            deq.push_back(stub);
             deq.pop_front();
             EXPECT_EQ(deq.__get_num_active_chunks(), 0);
             EXPECT_LE(deq.__get_num_chunks(), 3);
         }
+        this -> tracker.check_marked();
     }
 
     TEST_F(deque_test, shift_right_gap_test) {
         deque_type deq;
-        deq.push_back(constructor_stub(0));
+        constructor_stub stub;
+        this -> tracker.mark();
+        deq.push_back(stub);
         for (int i = 1; i < LIMIT; ++i) {
-            deq.push_back(constructor_stub(i));
+            deq.push_back(stub);
             deq.pop_front();
             EXPECT_EQ(deq.__get_num_active_chunks(), 1);
             EXPECT_LE(deq.__get_num_chunks(), 6);
         }
+        this -> tracker.check_marked();
     }
 
     void push_pop_back_tester(std::size_t limit) {
@@ -482,14 +532,20 @@ namespace {
         std::deque<constructor_stub> standard;
         for (std::size_t i = 1; i < LIMIT; i *= 2) {
             for (std::size_t j = 0; j < i; ++j) {
-                deq.push_back(constructor_stub(j));
                 standard.push_back(constructor_stub(j));
             }
+            this -> tracker.mark();
+            for (std::size_t j = 0; j < i; ++j) {
+                deq.push_back(standard[j]);
+            }
+            this -> tracker.check_marked();
             test_deq_std_deq_equality(deq, standard);
+            standard.clear();
+            this -> tracker.mark();
             for (std::size_t j = 0; j < i; ++j) {
                 deq.pop_back();
-                standard.pop_back();
             }
+            this -> tracker.check_marked();
         }
     }
 
@@ -523,14 +579,20 @@ namespace {
         std::deque<constructor_stub> standard;
         for (std::size_t i = 1; i < LIMIT; i *= 2) {
             for (std::size_t j = 0; j < i; ++j) {
-                deq.push_front(constructor_stub(j));
                 standard.push_front(constructor_stub(j));
             }
+            this -> tracker.mark();
+            for (std::size_t j = 0; j < i; ++j) {
+                deq.push_front(standard[standard.size() - 1 - j]);
+            }
+            this -> tracker.check_marked();
             test_deq_std_deq_equality(deq, standard);
+            standard.clear();
+            this -> tracker.mark();
             for (std::size_t j = 0; j < i; ++j) {
                 deq.pop_front();
-                standard.pop_front();
             }
+            this -> tracker.check_marked();
         }
     }
 
@@ -563,14 +625,19 @@ namespace {
 
     TEST_F(deque_test, insert_single_move_test) {
         deque_type deq;
-        deq.insert(deq.begin(), constructor_stub(0));
+        constructor_stub stub;
+        this -> tracker.mark();
+        deq.insert(deq.begin(), std::move(stub));
+        this -> tracker.check_marked();
         EXPECT_EQ(1, constructor_stub::move_constructor_invocation_count);
         EXPECT_EQ(2, constructor_stub::constructor_invocation_count);
     }
 
     TEST_F(deque_test, insert_emplace_test) {
         deque_type deq;
+        this -> tracker.mark();
         deq.emplace(deq.begin(), 0);
+        this -> tracker.check_marked();
         EXPECT_EQ(1, constructor_stub::id_constructor_invocation_count);
         EXPECT_EQ(1, constructor_stub::constructor_invocation_count);
     }
@@ -578,7 +645,10 @@ namespace {
     TEST_F(deque_test, insert_single_begin_test) {
         deque_type deq;
         for (int i = 0; i < MEDIUM_LIMIT; ++i) {
-            deq.insert(deq.begin(), constructor_stub(i));
+            constructor_stub stub(i);
+            this -> tracker.mark();
+            deq.insert(deq.begin(), stub);
+            this -> tracker.check_marked();
         }
         for (int i = 0; i < MEDIUM_LIMIT; ++i) {
             EXPECT_EQ(MEDIUM_LIMIT - deq[i].id - 1, i);
@@ -588,7 +658,10 @@ namespace {
     TEST_F(deque_test, insert_single_end_test) {
         deque_type deq;
         for (int i = 0; i < MEDIUM_LIMIT; ++i) {
-            deq.insert(deq.end(), constructor_stub(i));
+            constructor_stub stub(i);
+            this -> tracker.mark();
+            deq.insert(deq.end(), stub);
+            this -> tracker.check_marked();
         }
         for (int i = 0; i < MEDIUM_LIMIT; ++i) {
             EXPECT_EQ(deq[i].id, i);
@@ -599,8 +672,11 @@ namespace {
         deque_type deq(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> standard(SMALL_LIMIT, constructor_stub(0));
         for (int i = 0, j = 1; i < MEDIUM_LIMIT; ++i) {
-            deq.insert(deq.begin() + j, constructor_stub(i));
-            standard.insert(standard.begin() + j, constructor_stub(i));
+            constructor_stub stub(i);
+            this -> tracker.mark();
+            deq.insert(deq.begin() + j, stub);
+            this -> tracker.check_marked();
+            standard.insert(standard.begin() + j, stub);
             j++;
             if ((std::size_t) j == standard.size() / 2) {
                 j = 1;
@@ -640,8 +716,11 @@ namespace {
         deque_type deq(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> standard(SMALL_LIMIT, constructor_stub(0));
         for (int i = 0, j = deq.size() / 2 + 1; i < MEDIUM_LIMIT; ++i) {
-            deq.insert(deq.begin() + j, constructor_stub(i));
-            standard.insert(standard.begin() + j, constructor_stub(i));
+            constructor_stub stub(i);
+            this -> tracker.mark();
+            deq.insert(deq.begin() + j, stub);
+            this -> tracker.check_marked();
+            standard.insert(standard.begin() + j, stub);
             j++;
             if ((std::size_t) j == standard.size()) {
                 j = deq.size() / 2 + 1;
@@ -666,22 +745,25 @@ namespace {
         insert_single_right_exception_safety_tester<constructor_stub*>([](deque_type& deq) { return deq.__back_ghost_capacity(); });
     }
 
-    void insert_fill_begin_tester(std::size_t batch) {
+    void insert_fill_begin_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq;
         std::deque<constructor_stub> standard;
         for (int i = 0; i < MEDIUM_LIMIT; i += batch) {
-            deq.insert(deq.begin(), batch, constructor_stub(i));
-            standard.insert(standard.begin(), batch, constructor_stub(i));
+            constructor_stub stub(i);
+            tracker.mark();
+            deq.insert(deq.begin(), batch, stub);
+            tracker.check_marked();
+            standard.insert(standard.begin(), batch, stub);
             test_deq_std_deq_equality(deq, standard);
         }
     }
 
     TEST_F(deque_test, insert_fill_begin_small_batch_test) {
-        insert_fill_begin_tester(5);
+        insert_fill_begin_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_fill_begin_big_batch_test) {
-        insert_fill_begin_tester(200);
+        insert_fill_begin_tester(this -> tracker, 200);
     }
 
     template<typename T>
@@ -711,22 +793,25 @@ namespace {
         insert_fill_begin_exception_safety_tester<constructor_stub*>([](deque_type& deq) { return deq.__front_ghost_capacity(); });
     }
 
-    void insert_fill_end_tester(std::size_t batch) {
+    void insert_fill_end_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq;
         std::deque<constructor_stub> standard;
         for (int i = 0; i < MEDIUM_LIMIT; i += batch) {
-            deq.insert(deq.end(), batch, constructor_stub(i));
-            standard.insert(standard.end(), batch, constructor_stub(i));
+            constructor_stub stub(i);
+            tracker.mark();
+            deq.insert(deq.end(), batch, stub);
+            tracker.check_marked();
+            standard.insert(standard.end(), batch, stub);
             test_deq_std_deq_equality(deq, standard);
         }
     }
 
     TEST_F(deque_test, insert_fill_end_small_batch_test) {
-        insert_fill_end_tester(5);
+        insert_fill_end_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_fill_end_big_batch_test) {
-        insert_fill_end_tester(200);
+        insert_fill_end_tester(this -> tracker, 200);
     }
 
     template<typename T>
@@ -745,12 +830,15 @@ namespace {
         insert_fill_end_exception_safety_tester<constructor_stub*>([](deque_type& deq) { return deq.__back_ghost_capacity(); });
     }
 
-    void insert_fill_left_tester(std::size_t batch) {
+    void insert_fill_left_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> standard(SMALL_LIMIT, constructor_stub(0));
         for (int i = 0, j = 1; i < MEDIUM_LIMIT; i += batch) {
-            deq.insert(deq.begin() + j, batch, constructor_stub(i));
-            standard.insert(standard.begin() + j, batch, constructor_stub(i));
+            constructor_stub stub(i);
+            tracker.mark();
+            deq.insert(deq.begin() + j, batch, stub);
+            tracker.check_marked();
+            standard.insert(standard.begin() + j, batch, stub);
             j++;
             if ((std::size_t) j == standard.size() / 2) {
                 j = 1;
@@ -760,11 +848,11 @@ namespace {
     }
 
     TEST_F(deque_test, insert_fill_left_small_batch_test) {
-        insert_fill_left_tester(5);
+        insert_fill_left_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_fill_left_big_batch_test) {
-        insert_fill_left_tester(200);
+        insert_fill_left_tester(this -> tracker, 200);
     }
 
     template<typename T>
@@ -783,12 +871,15 @@ namespace {
         insert_fill_left_exception_safety_tester<constructor_stub*>([](deque_type& deq) { return deq.__front_ghost_capacity(); });
     }
 
-    void insert_fill_right_tester(std::size_t batch) {
+    void insert_fill_right_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> standard(SMALL_LIMIT, constructor_stub(0));
         for (int i = 0, j = deq.size() / 2 + 1; i < MEDIUM_LIMIT; i += batch) {
-            deq.insert(deq.begin() + j, batch, constructor_stub(i));
-            standard.insert(standard.begin() + j, batch, constructor_stub(i));
+            constructor_stub stub(i);
+            tracker.mark();
+            deq.insert(deq.begin() + j, batch, stub);
+            tracker.check_marked();
+            standard.insert(standard.begin() + j, batch, stub);
             j++;
             if ((std::size_t) j == standard.size()) {
                 j = deq.size() / 2 + 1;
@@ -798,11 +889,11 @@ namespace {
     }
 
     TEST_F(deque_test, insert_fill_right_small_batch_test) {
-        insert_fill_right_tester(5);
+        insert_fill_right_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_fill_right_big_batch_test) {
-        insert_fill_right_tester(200);
+        insert_fill_right_tester(this -> tracker, 200);
     }
 
     template<typename T>
@@ -821,7 +912,7 @@ namespace {
         insert_fill_right_exception_safety_tester<constructor_stub*>([](deque_type& deq) { return deq.__back_ghost_capacity(); });
     }
 
-    void insert_range_begin_tester(std::size_t batch) {
+    void insert_range_begin_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq;
         std::deque<constructor_stub> standard;
         std::deque<constructor_stub> content(batch);
@@ -829,21 +920,23 @@ namespace {
             content.emplace_back(i);
         }
         for (int i = 0; i < MEDIUM_LIMIT; i += batch) {
+            tracker.mark();
             deq.insert(deq.begin(), content.begin(), content.end());
+            tracker.check_marked();
             standard.insert(standard.begin(), content.begin(), content.end());
             test_deq_std_deq_equality(deq, standard);
         }
     }
 
     TEST_F(deque_test, insert_range_begin_small_batch_test) {
-        insert_range_begin_tester(5);
+        insert_range_begin_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_range_begin_big_batch_test) {
-        insert_range_begin_tester(200);
+        insert_range_begin_tester(this -> tracker, 200);
     }
 
-    void insert_range_end_tester(std::size_t batch) {
+    void insert_range_end_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq;
         std::deque<constructor_stub> standard;
         std::deque<constructor_stub> content(batch);
@@ -851,21 +944,23 @@ namespace {
             content.emplace_back(i);
         }
         for (int i = 0; i < MEDIUM_LIMIT; i += batch) {
+            tracker.mark();
             deq.insert(deq.end(), content.begin(), content.end());
+            tracker.check_marked();
             standard.insert(standard.end(), content.begin(), content.end());
             test_deq_std_deq_equality(deq, standard);
         }
     }
 
     TEST_F(deque_test, insert_range_end_small_batch_test) {
-        insert_range_end_tester(5);
+        insert_range_end_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_range_end_big_batch_test) {
-        insert_range_end_tester(200);
+        insert_range_end_tester(this -> tracker, 200);
     }
 
-    void insert_range_left_tester(std::size_t batch) {
+    void insert_range_left_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> standard(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> content(batch);
@@ -873,7 +968,9 @@ namespace {
             content.emplace_back(i);
         }
         for (int i = 0, j = 1; i < MEDIUM_LIMIT; i += batch) {
+            tracker.mark();
             deq.insert(deq.begin() + j, content.begin(), content.end());
+            tracker.check_marked();
             standard.insert(standard.begin() + j, content.begin(), content.end());
             j++;
             if ((std::size_t) j == standard.size() / 2) {
@@ -884,14 +981,14 @@ namespace {
     }
 
     TEST_F(deque_test, insert_range_left_small_batch_test) {
-        insert_range_left_tester(5);
+        insert_range_left_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_range_left_big_batch_test) {
-        insert_range_left_tester(200);
+        insert_range_left_tester(this -> tracker, 200);
     }
 
-    void insert_range_right_tester(std::size_t batch) {
+    void insert_range_right_tester(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> standard(SMALL_LIMIT, constructor_stub(0));
         std::deque<constructor_stub> content(batch);
@@ -899,7 +996,9 @@ namespace {
             content.emplace_back(i);
         }
         for (int i = 0, j = deq.size() / 2 + 1; i < MEDIUM_LIMIT; i += batch) {
+            tracker.mark();
             deq.insert(deq.begin() + j, content.begin(), content.end());
+            tracker.check_marked();
             standard.insert(standard.begin() + j, content.begin(), content.end());
             j++;
             if ((std::size_t) j == standard.size()) {
@@ -910,11 +1009,11 @@ namespace {
     }
 
     TEST_F(deque_test, insert_range_right_small_batch_test) {
-        insert_range_right_tester(5);
+        insert_range_right_tester(this -> tracker, 5);
     }
 
     TEST_F(deque_test, insert_range_right_big_batch_test) {
-        insert_range_right_tester(200);
+        insert_range_right_tester(this -> tracker, 200);
     }
 
     void insert_range_begin_input_iterator_tester(std::size_t batch) {
@@ -1048,7 +1147,9 @@ namespace {
             standard.emplace_back(constructor_stub(i));
         }
         for (int i = 0; i < MEDIUM_LIMIT; ++i) {
+            this -> tracker.mark();
             deq.erase(deq.begin());
+            this -> tracker.check_marked();
             standard.erase(standard.begin());
             test_deq_std_deq_equality(deq, standard);
         }
@@ -1062,7 +1163,9 @@ namespace {
             standard.emplace_back(constructor_stub(i));
         }
         for (int i = 0; i < MEDIUM_LIMIT; ++i) {
+            this -> tracker.mark();
             deq.erase(deq.end() - 1);
+            this -> tracker.check_marked();
             standard.erase(standard.end() - 1);
             test_deq_std_deq_equality(deq, standard);
         }
@@ -1076,7 +1179,9 @@ namespace {
             standard.emplace_back(constructor_stub(i));
         }
         for (int i = 0, j = 1; i < MEDIUM_LIMIT / 2; ++i) {
+            this -> tracker.mark();
             deq.erase(deq.begin() + j);
+            this -> tracker.check_marked();
             standard.erase(standard.begin() + j);
             j++;
             if ((std::size_t) j >= standard.size() / 2) {
@@ -1094,7 +1199,9 @@ namespace {
             standard.emplace_back(constructor_stub(i));
         }
         for (int i = 0, j = standard.size() + 1; i < MEDIUM_LIMIT / 2; ++i) {
+            this -> tracker.mark();
             deq.erase(deq.begin() + j);
+            this -> tracker.check_marked();
             standard.erase(standard.begin() + j);
             j++;
             if ((std::size_t) j >= standard.size()) {
@@ -1104,7 +1211,7 @@ namespace {
         }
     }
     
-    void erase_range_left_test(std::size_t batch) {
+    void erase_range_left_test(construction_destruction_tracker& tracker, std::size_t batch) {
         deque_type deq;
         std::deque<constructor_stub> standard;
         for (int i = 0; i < MEDIUM_LIMIT; ++i) {
@@ -1112,7 +1219,9 @@ namespace {
             standard.emplace_back(constructor_stub(i));
         }
         for (int i = 0, j = 1; i + batch + 1 < MEDIUM_LIMIT; i += batch) {
+            tracker.mark();
             deq.erase(deq.begin() + j, deq.begin() + j + batch);
+            tracker.check_marked();
             standard.erase(standard.begin() + j, standard.begin() + j + batch);
             j++;
             if ((std::size_t) j >= standard.size() / 2) {
@@ -1123,11 +1232,11 @@ namespace {
     }
 
     TEST_F(deque_test, erase_range_left_small_batch_test) {
-        erase_range_left_test(5);
+        erase_range_left_test(this -> tracker, 5);
     }
 
     TEST_F(deque_test, erase_range_right_small_batch_test) {
-        erase_range_left_test(100);
+        erase_range_left_test(this -> tracker, 100);
     }
 
     TEST_F(deque_test, begin_end_test) {
@@ -1187,6 +1296,101 @@ namespace {
         }
         return stubs;
     }
+
+    TEST_F(deque_test, copy_only_constructor_test) {
+        using copy_only_deque_type = deque<copy_only_constructor_stub, tracking_allocator<copy_only_constructor_stub>>;
+        copy_only_deque_type deq1;
+        copy_only_deque_type deq2(SMALL_LIMIT);
+        copy_only_constructor_stub stub;
+        copy_only_deque_type deq3(SMALL_LIMIT, stub);
+        copy_only_deque_type deq4(deq3.begin(), deq3.end());
+        copy_only_deque_type deq5(deq4);
+        copy_only_deque_type deq6(std::move(deq5));
+    }
+
+    TEST_F(deque_test, copy_only_operation_test) {
+        deque<copy_only_constructor_stub, tracking_allocator<copy_only_constructor_stub> > deq;
+        std::deque<constructor_stub> standard;
+        deq.insert(deq.begin(), copy_only_constructor_stub(SPECIAL_VALUE));
+        standard.insert(standard.begin(), constructor_stub(SPECIAL_VALUE));
+        copy_only_constructor_stub stub(SPECIAL_VALUE2);
+        constructor_stub mirror(SPECIAL_VALUE2);
+        deq.push_back(stub);
+        standard.push_back(mirror);
+        deq.push_front(stub);
+        standard.push_front(mirror);
+        deq.emplace_back(stub);
+        standard.emplace_back(mirror);
+        deq.emplace_front(stub);
+        standard.emplace_front(mirror);
+        deq.push_back(copy_only_constructor_stub(stub));
+        standard.push_back(constructor_stub(mirror));
+        std::deque<int> nums(SMALL_LIMIT, SPECIAL_VALUE);
+
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, SMALL_LIMIT, mirror);
+        // If the iterator's value type is not the same as the deqtor value type, we don't care whether the deqtor value type
+        // has a valid copy or move constructor
+        deq.insert(deq.begin() + deq.size() / 2, nums.begin(), nums.end());
+        deq.insert(deq.begin() + deq.size() / 2, std::make_move_iterator(nums.begin()), std::make_move_iterator(nums.end()));
+        deq.insert(deq.begin() + deq.size() / 2, SMALL_LIMIT, stub);
+        EXPECT_EQ(standard.size(), deq.size());
+        for (std::size_t i = 0; i < standard.size(); ++i) {
+            EXPECT_EQ(deq[i].id, standard[i].id);
+        }
+        deq.erase(deq.begin() + deq.size() / 3, deq.end());
+        deq.pop_back();
+        deq.pop_front();
+    }
+
+    TEST_F(deque_test, move_only_constructor_test) {
+        using move_only_deque_type = deque<move_only_constructor_stub, tracking_allocator<move_only_constructor_stub>>;
+        move_only_deque_type deq1;
+        move_only_deque_type deq2(SMALL_LIMIT);
+        move_only_deque_type deq3(std::make_move_iterator(deq2.begin()), std::make_move_iterator(deq2.end()));
+        move_only_deque_type deq4(std::move(deq3));
+        EXPECT_TRUE(deq3.empty());
+    }
+
+    TEST_F(deque_test, move_only_operation_test) {
+        deque<move_only_constructor_stub, tracking_allocator<move_only_constructor_stub> > deq;
+        std::deque<constructor_stub> standard;
+        deq.insert(deq.begin(), move_only_constructor_stub(SPECIAL_VALUE));
+        standard.insert(standard.begin(), constructor_stub(SPECIAL_VALUE));
+        deq.push_back(move_only_constructor_stub(SPECIAL_VALUE2));
+        standard.push_back(constructor_stub(SPECIAL_VALUE2));
+        deq.push_front(move_only_constructor_stub(SPECIAL_VALUE2));
+        standard.push_front(constructor_stub(SPECIAL_VALUE2));
+        deq.emplace_back(SPECIAL_VALUE2);
+        standard.emplace_back(SPECIAL_VALUE2);
+        deq.emplace_front(SPECIAL_VALUE2);
+        standard.emplace_front(SPECIAL_VALUE2);
+        std::deque<int> nums(SMALL_LIMIT, SPECIAL_VALUE);
+        deque<move_only_constructor_stub, tracking_allocator<move_only_constructor_stub> > src(SMALL_LIMIT);
+        std::deque<constructor_stub> standard_src(SMALL_LIMIT);
+        for (int i = 0; i < SMALL_LIMIT; i++) {
+            src[i] = i;
+            standard_src[i] = i;
+        }
+
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, standard_src.begin(), standard_src.end());
+        // If the iterator's value type is not the same as the vector value type, we don't care whether the vector value type
+        // has a valid copy or move constructor
+        deq.insert(deq.begin() + deq.size() / 2, nums.begin(), nums.end());
+        deq.insert(deq.begin() + deq.size() / 2, std::make_move_iterator(nums.begin()), std::make_move_iterator(nums.end()));
+        deq.insert(deq.begin() + deq.size() / 2, std::make_move_iterator(src.begin()), std::make_move_iterator(src.end()));
+        EXPECT_EQ(standard.size(), deq.size());
+        for (std::size_t i = 0; i < standard.size(); ++i) {
+            EXPECT_EQ(deq[i].id, standard[i].id);
+        }
+        deq.erase(deq.begin() + deq.size() / 3, deq.end());
+        deq.pop_back();
+        deq.pop_front();
+    }
+
 
     TEST_F(deque_test, equality_test) {
         deque_type deq1 = to_stub_deque({0, 1, 2});

@@ -59,10 +59,11 @@ public:
      * @param comp the value comparator used by the set
      * @param allocator the allocator to construct and destroy elements
      */
-    template<std::input_iterator InputIt>
+    template<typename InputIt>
     red_black_tree_set(InputIt first, InputIt last, 
                  const Compare& comp = Compare(),
                  const Allocator& allocator = Allocator())
+        requires conjugate_uninitialized_input_iterator<InputIt, value_type> 
         : tree(first, last, comp, allocator) { }
 
     /**
@@ -73,8 +74,9 @@ public:
      * @param last iterator to one past the last element in the range
      * @param allocator the allocator to construct and destroy elements
      */
-    template<std::input_iterator InputIt>
+    template<typename InputIt>
     red_black_tree_set(InputIt first, InputIt last, const Allocator& allocator)
+        requires conjugate_uninitialized_input_iterator<InputIt, value_type>
         : tree(first, last, Compare(), allocator) { }
 
     /**
@@ -292,8 +294,9 @@ public:
      * @param first an iterator to the first element in the range
      * @param last an iterator to one past the last element in the range
      */
-    template <std::input_iterator InputIt>
-    void insert(InputIt first, InputIt last) {
+    template <typename InputIt>
+    void insert(InputIt first, InputIt last) 
+        requires conjugate_uninitialized_input_iterator<InputIt, value_type> {
         tree.insert(first, last);
     }
 
@@ -314,6 +317,23 @@ public:
     template <typename... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
         return tree.emplace(std::forward<Args>(args)...);
+    }
+
+    /**
+     * @brief In-place construct and insert an element given the arguments
+     *        to construct it. Use an iterator as a hint for efficient insertion.
+     *
+     * A value is always constructed regardless if it already exists in the tree
+     * 
+     * @tparam Args the type of arguments to construct the value
+     * @param hint an iterator that is close to the insertion location of the new value. If the iterator
+     *             is far from insertion location, the value is emplaced as if emplace(std::forward<Args>(args)...)
+     * @param args the arguments to construct the value
+     * @return an iterator to the inserted element, or to the element that prevented the insertion
+     */
+    template<typename... Args>
+    iterator emplace_hint(const_iterator hint, Args&&... args) {
+        return tree.emplace_hint(hint, std::forward<Args>(args)...);
     }
 
     /**
@@ -386,6 +406,16 @@ public:
      */
     friend std::strong_ordering operator<=>(const red_black_tree_set& set1, const red_black_tree_set& set2) requires less_comparable<value_type> {
         return set1.tree <=> set2.tree;
+    }
+
+    /**
+     * @brief count the number of occurrences of a particular value
+     * 
+     * @param value the value to query
+     * @return 1 if this value exists in this set, 0 otherwise
+     */
+    std::size_t count(const value_type& value) {
+        return tree.find(value) != tree.end() ? 1 : 0;
     }
     
     /**

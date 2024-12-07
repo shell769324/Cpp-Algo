@@ -22,10 +22,8 @@ using constify = rebinder<std::add_const_t<T>, Node>::type;
  * @brief Bidirectional iterator for binary tree
  * 
  * @tparam T the type of the value inside the iterator
- * @tparam Reverse if true, the iterator will iterate in the opposite way
- *         its non-reverse counterpart do 
  */
-template <typename Node, bool Reverse=false>
+template <typename Node>
 class binary_tree_iterator {
     using T = typename Node::value_type;
 
@@ -99,7 +97,7 @@ private:
      * 
      * @param other the const iterator to copy from
      */
-    explicit binary_tree_iterator(const binary_tree_iterator<const_node_type, Reverse>& other)
+    explicit binary_tree_iterator(const binary_tree_iterator<const_node_type>& other)
         requires (!std::is_const_v<T>) : node(other.node) { }
 
 public:
@@ -108,7 +106,7 @@ public:
      * 
      * @param other a non-const tree iterator
      */
-    binary_tree_iterator(const binary_tree_iterator<node_type, Reverse>& other)
+    binary_tree_iterator(const binary_tree_iterator<node_type>& other)
         requires std::is_const_v<T> : node(other.node) { }
 
     /**
@@ -131,11 +129,7 @@ public:
      * @return a copy of this iterator after incrementing
      */
     binary_tree_iterator& operator++() noexcept {
-        if constexpr (Reverse) {
-            node = node -> prev();
-        } else {
-            node = node -> next();
-        }
+        node = node -> next();
         return *this;
     }
 
@@ -146,11 +140,7 @@ public:
      */
     binary_tree_iterator operator++(int) noexcept {
         binary_tree_iterator tmp = *this;
-        if constexpr (Reverse) {
-            node = node -> prev();
-        } else {
-            node = node -> next();
-        }
+        node = node -> next();
         return tmp;
     }
     
@@ -160,11 +150,7 @@ public:
      * @return a copy of this iterator after decrementing 
      */
     binary_tree_iterator& operator--() noexcept {
-        if constexpr (Reverse) {
-            node = node -> next();
-        } else {
-            node = node -> prev();
-        }
+        node = node -> prev();
         return *this;
     }
 
@@ -175,11 +161,7 @@ public:
      */
     binary_tree_iterator operator--(int) noexcept {
         binary_tree_iterator tmp = *this;
-        if constexpr (Reverse) {
-            node = node -> next();
-        } else {
-            node = node -> prev();
-        }
+        node = node -> prev();
         return tmp;
     }
 
@@ -196,6 +178,10 @@ public:
 
     // Ideally the value type V should be T but cpp doesn't allow partially
     // specialized template friend class
+    template <typename K, typename V, typename KeyOf, typename NodeType, typename TreeType, typename Compare, typename Allocator>
+    requires binary_tree_definable<K, V, KeyOf, Compare, Allocator>
+    friend class binary_tree_base;
+
     template <typename K, typename V, typename KeyOf, typename Comparator, typename Allocator>
     requires binary_tree_definable<K, V, KeyOf, Comparator, Allocator>
     friend class avl_tree;
@@ -205,7 +191,7 @@ public:
     friend class red_black_tree;
 
     // const and non-const iterator of the same base type are friends
-    friend std::conditional<std::is_const_v<T>, binary_tree_iterator<node_type, Reverse>, void>::type;
-    friend std::conditional<(!std::is_const_v<T>), binary_tree_iterator<const_node_type, Reverse>, void>::type;
+    friend std::conditional<std::is_const_v<T>, binary_tree_iterator<node_type>, void>::type;
+    friend std::conditional<(!std::is_const_v<T>), binary_tree_iterator<const_node_type>, void>::type;
 };
 }

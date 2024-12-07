@@ -51,7 +51,7 @@ public:
      * @param n the length of the stack
      * @param value the element to copy
      */
-    stack(size_type n, const_reference value) requires std::copy_constructible<T> 
+    stack(size_type n, const_reference value) requires std::is_copy_constructible_v<T> 
         : container(n, value) { }
 
     /**
@@ -75,7 +75,7 @@ public:
      * 
      * @param other the stack to copy from
      */
-    stack(const stack& other) requires std::copy_constructible<T> 
+    stack(const stack& other) requires std::is_copy_constructible_v<T> 
         : container(other.container) { }
 
     /**
@@ -117,7 +117,7 @@ public:
      * @param other the stack to copy from
      * @return a reference to itself
      */
-    stack& operator=(const stack& other) requires std::copy_constructible<T> {
+    stack& operator=(const stack& other) requires std::is_copy_constructible_v<T> {
         if (this == &other) {
             return *this;
         }
@@ -169,7 +169,7 @@ public:
      * 
      * @param value the value to copy and append
      */
-    void push(const_reference value) requires std::copy_constructible<T> {
+    void push(const_reference value) requires std::is_copy_constructible_v<T> {
         container.push_back(value);
     }
 

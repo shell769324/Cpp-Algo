@@ -10,21 +10,9 @@ file(GLOB_RECURSE TEST_SOURCES LIST_DIRECTORIES false
     set_test.h
     stack_test/*
     deque_test/*
-    tree/tree_test_util.*
-    tree/binary_tree_node_util.*
-    tree/binary_tree_iterator_test.cpp
-    tree/binary_tree_node_test.cpp
-    tree/tree_common_test.h
-    tree/tree_bulk_operationr_complexity_test.h
-    tree/tree_parallel_comparison_test.h
-    tree/avl_node_test.cpp
-    tree/avl_tree_test.cpp
-    tree/avl_tree_map_test.cpp
-    tree/avl_tree_set_test.cpp
-    tree/red_black_tree_test.cpp
-    tree/red_black_tree_set_test.cpp
-    tree/red_black_tree_map_test.cpp
+    tree/*
     range_query_tree/*
+    allocator_aware_algorithms_test.cpp
     thread_pool_executor/thread_pool_executor_test.cpp
     main.cpp)
 

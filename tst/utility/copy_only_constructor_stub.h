@@ -19,11 +19,7 @@ public:
 
     copy_only_constructor_stub(const copy_only_constructor_stub& other);
 
-    copy_only_constructor_stub(copy_only_constructor_stub&& other) = delete;
-
     copy_only_constructor_stub& operator=(const copy_only_constructor_stub& other);
-
-    copy_only_constructor_stub& operator=(copy_only_constructor_stub&& other) = delete;
 
     static void reset_constructor_destructor_counter() noexcept;
 
@@ -31,4 +27,5 @@ public:
 };
 
 bool operator==(const copy_only_constructor_stub& a, const copy_only_constructor_stub& b);
+std::strong_ordering operator<=>(const copy_only_constructor_stub& a, const copy_only_constructor_stub& b);
 }

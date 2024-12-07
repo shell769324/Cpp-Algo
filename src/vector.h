@@ -163,7 +163,7 @@ public:
      * @param allocator an optional allocator to allocate and deallocate raw memory 
      */
     vector(size_type n, const_reference value, const allocator_type& allocator = allocator_type())
-            requires std::copy_constructible<T> : allocator(allocator) {
+            requires std::is_copy_constructible_v<T> : allocator(allocator) {
         constructor_helper(n, n);
         try {
             // all filled elements will be destroyed when one constructor throws an exception
@@ -183,12 +183,13 @@ public:
      * @param last the end of the range
      * @param allocator an optional allocator to allocate and deallocate raw memory 
      */
-    template<std::input_iterator InputIt>
-    vector(InputIt first, InputIt last, const allocator_type& allocator = allocator_type()) requires std::copy_constructible<T> 
-            : length(0), 
-              capacity(0), 
-              data(nullptr), 
-              allocator(allocator) {
+    template<typename InputIt>
+    vector(InputIt first, InputIt last, const allocator_type& allocator = allocator_type()) 
+        requires conjugate_uninitialized_input_iterator<InputIt, T>
+        : length(0), 
+          capacity(0), 
+          data(nullptr), 
+          allocator(allocator) {
         if (first == last) {
             constructor_helper(0, DEFAULT_CAPACITY);
         } else {
@@ -203,7 +204,7 @@ public:
      * 
      * @param other the vector to copy from
      */
-    vector(const vector& other) requires std::copy_constructible<T> : allocator(other.allocator) {
+    vector(const vector& other) requires std::is_copy_constructible_v<T> : allocator(other.allocator) {
         constructor_helper(other.length, other.capacity);
         try {
             uninitialized_copy(other.cbegin(), other.cend(), data, allocator);
@@ -302,17 +303,17 @@ public:
      * @param other the vector to copy from
      * @return a reference to itself
      */
-    vector& operator=(const vector& other) requires std::copy_constructible<T> {
+    vector& operator=(const vector& other) requires std::is_copy_constructible_v<T> {
         if (this == &other) {
             return *this;
         }
 
         if constexpr (std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_destructible_v<T>) {
             if (capacity >= other.length) {
+                allocator = other.allocator;
                 destroy(data, data + length, allocator);
                 uninitialized_copy(other.data, other.data + other.length, data, allocator);
                 length = other.length;
-                allocator = other.allocator;
                 return *this;
             }
         }
@@ -491,7 +492,7 @@ public:
      * 
      * @return an iterator pointing to the inserted value
      */
-    iterator insert(const_iterator pos, const_reference value) requires std::copy_constructible<T> {
+    iterator insert(const_iterator pos, const_reference value) requires std::is_copy_constructible_v<T> {
         if (pos == end()) {
             push_back(value);
             return end() - 1;
@@ -529,18 +530,44 @@ public:
     }
 
     /**
+     * @brief Insert the same copy of the value a specific number of times before a position
+     * 
+     * @tparam ForwardIt the type of the input iterator, must satisfy the spec
+     *         of std::forward_iterator
+     * @param pos the location to insert the value copies 
+     * @param count the number of times to insert the value copies
+     * @param value the value to insert
+     * @return iterator to the first inserted value
+     */
+    iterator insert(const_iterator pos, size_type count, const_reference value)
+        requires std::is_copy_constructible_v<T> {
+        if (count == 0) {
+            return const_cast<T*>(pos);
+        }
+        // get the idx before the iterator is invalidated
+        difference_type idx = pos - data;
+        make_room(pos, count);
+        // insert values
+        T* to = data + idx;
+        uninitialized_fill(to, to + count, value, allocator);
+        length += count;
+        return to;
+    }
+
+    /**
      * @brief Insert elements from a range before pos. The range is specified
      *      by a pair of iterators
      * 
-     * @tparam InputIt the type of the input iterator, must satisfy the spec
-     *      of std::forward_iterator
+     * @tparam ForwardIt the type of the input iterator, must satisfy the spec
+     *         of std::forward_iterator
      * @param pos the iterator
      * @param first the beginning of the range, pointing to the first element to insert
      * @param last one past the last element to insert
      * @return iterator pointing to the first element inserted, pos if the range is empty 
      */
-    template<std::forward_iterator InputIt>
-    iterator insert(const_iterator pos, InputIt first, InputIt last) requires std::copy_constructible<T> {
+    template<typename ForwardIt>
+    iterator insert(const_iterator pos, ForwardIt first, ForwardIt last) 
+        requires conjugate_uninitialized_forward_iterator<ForwardIt, value_type> {
         if (first == last) {
             return const_cast<T*>(pos);
         }
@@ -560,14 +587,15 @@ public:
      *      by a pair of iterators
      * 
      * @tparam InputIt the type of the input iterator must satisfy the spec
-     *      of std::input_iterator
+     *         of std::input_iterator
      * @param pos the iterator
      * @param first the beginning of the range, pointing to the first element to insert
      * @param last one past the last element to insert
      * @return iterator pointing to the first element inserted, pos if the range is empty 
      */
-    template<std::input_iterator InputIt>
-    iterator insert(const_iterator pos, InputIt first, InputIt last) requires std::copy_constructible<T> {
+    template<typename InputIt>
+    iterator insert(const_iterator pos, InputIt first, InputIt last) 
+        requires conjugate_uninitialized_input_iterator<InputIt, value_type> && (!std::forward_iterator<InputIt>) {
         if (first == last) {
             return const_cast<T*>(pos);
         }
@@ -576,7 +604,11 @@ public:
         for (auto& it = first; it != last; ++it) {
             storage.push_back(*it);
         }
-        return insert(pos, storage.begin(), storage.end());
+        if constexpr (std::is_move_constructible_v<value_type>) {
+            return insert(pos, std::make_move_iterator(storage.begin()), std::make_move_iterator(storage.end()));
+        } else {
+            return insert(pos, storage.begin(), storage.end());
+        }
     }
 
     /**
@@ -624,7 +656,7 @@ public:
      * 
      * @param value the value to copy and append
      */
-    void push_back(const_reference value) requires std::copy_constructible<T> {
+    void push_back(const_reference value) requires std::is_copy_constructible_v<T> {
         // If we are at capacity
         if (length == capacity) {
             resize_buffer(capacity * 2);

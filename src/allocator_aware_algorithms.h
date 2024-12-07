@@ -5,8 +5,9 @@
 
 namespace algo {
 
-template<std::forward_iterator ForwardIt, typename Allocator>
-void destroy(ForwardIt first, ForwardIt last, Allocator& allocator) {
+template<typename Iterator, typename Allocator>
+requires std::weakly_incrementable<Iterator> && std::indirectly_readable<Iterator> && std::equality_comparable<Iterator>
+void destroy(Iterator first, Iterator last, Allocator& allocator) {
     using alloc_traits = std::allocator_traits<Allocator>;
     for (; first != last; ++first) {
         alloc_traits::destroy(allocator, std::addressof(*first));

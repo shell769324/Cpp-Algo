@@ -1,6 +1,8 @@
 #include "gtest/gtest.h"
 #include "tree/avl_tree_set.h"
 #include "tst/utility/constructor_stub.h"
+#include "tst/utility/copy_only_constructor_stub.h"
+#include "tst/utility/move_only_constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
 #include <iostream>
 #include "tst/utility/tracking_allocator.h"
@@ -24,7 +26,11 @@ namespace {
         }
     };
 
-    using stub_avl_set_type = avl_tree_set<constructor_stub, constructor_stub_comparator, tracking_allocator<constructor_stub> >;
+    struct type_holder {
+        using regular_type = avl_tree_set<constructor_stub, constructor_stub_comparator, tracking_allocator<constructor_stub> >;
+        using copy_only_type = avl_tree_set<copy_only_constructor_stub, std::less<copy_only_constructor_stub>, tracking_allocator<copy_only_constructor_stub> >;
+        using move_only_type = avl_tree_set<move_only_constructor_stub, std::less<move_only_constructor_stub>, tracking_allocator<move_only_constructor_stub> >;
+    };
 
-    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree, set_test, stub_avl_set_type);
+    INSTANTIATE_TYPED_TEST_SUITE_P(avl_tree, set_test, type_holder);
 }

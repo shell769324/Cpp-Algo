@@ -6,23 +6,25 @@
 #include "tst/utility/tracking_allocator.h"
 #include "tst/utility/common.h"
 #include <vector>
+#include "tst/utility/move_only_constructor_stub.h"
+#include "tst/utility/copy_only_constructor_stub.h"
+#include "tst/utility/construction_destruction_tracker.h"
 
 namespace {
     using namespace algo;
     class vector_test : public ::testing::Test {
     protected:
+        construction_destruction_tracker tracker;
         static void SetUpTestCase() {
             std::srand(7759);
         }
 
         virtual void SetUp() {
-            tracking_allocator<constructor_stub>::reset();
-            constructor_stub::reset_constructor_destructor_counter();
+            tracker.reset();
         }
 
         virtual void TearDown() {
-            EXPECT_EQ(constructor_stub::constructor_invocation_count, constructor_stub::destructor_invocation_count);
-            tracking_allocator<constructor_stub>::check();
+            tracker.check();
         }
     };
 
@@ -66,7 +68,7 @@ namespace {
         EXPECT_EQ(constructor_stub::constructor_invocation_count, 0);
         EXPECT_EQ(vec.__get_default_capacity(), allocated<constructor_stub>);
     }
-/*
+
     TEST_F(vector_test, default_constructor_test) {
         vector_type vec;
         default_constructor_test_helper(vec);
@@ -86,7 +88,9 @@ namespace {
     }
 
     TEST_F(vector_test, default_fill_constructor_test) {
+        this -> tracker.mark();
         vector_type vec(SMALL_LIMIT);
+        this -> tracker.check_marked();
         default_fill_constructor_test_helper(vec);
     }
 
@@ -109,7 +113,9 @@ namespace {
 
     TEST_F(vector_test, fill_constructor_test) {
         constructor_stub stub;
+        this -> tracker.mark();
         vector_type vec(SMALL_LIMIT, stub, allocator);
+        this -> tracker.check_marked();
         fill_constructor_test_helper(stub, vec);
         EXPECT_EQ(vec.get_allocator(), allocator);
     }
@@ -129,7 +135,9 @@ namespace {
 
     TEST_F(vector_test, range_constructor_test) {
         std::vector<constructor_stub> std_vec(MEDIUM_LIMIT);
+        this -> tracker.mark();
         vector_type vec(std_vec.begin(), std_vec.end(), allocator);
+        this -> tracker.check_marked();
         range_constructor_test_helper(std_vec, vec);
         EXPECT_EQ(vec.get_allocator(), allocator);
     }
@@ -153,7 +161,9 @@ namespace {
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         std::size_t copy_count = constructor_stub::copy_constructor_invocation_count;
         std::size_t alloc_count = allocated<constructor_stub>;
+        this -> tracker.mark();
         vector_type vec_copy(vec);
+        this -> tracker.check_marked();
         EXPECT_EQ(copy_count + MEDIUM_LIMIT, constructor_stub::copy_constructor_invocation_count);
         EXPECT_EQ(alloc_count + MEDIUM_LIMIT, allocated<constructor_stub>);
         EXPECT_EQ(vec.__get_capacity(), vec_copy.__get_capacity());
@@ -228,7 +238,9 @@ namespace {
         vector_type vec(MEDIUM_LIMIT);
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         vector_type vec_copy;
+        this -> tracker.mark();
         vec_copy = vec;
+        this -> tracker.check_marked();
         test_vec_std_vec_equality(vec, std_vec);
         test_vec_std_vec_equality(vec_copy, std_vec);
     }
@@ -240,7 +252,9 @@ namespace {
         // No buffer allocated if the destination is big enough
         std::size_t alloc_count = allocated<int>;
         EXPECT_GT(alloc_count, 0);
+        this -> tracker.mark();
         vec_copy = vec;
+        this -> tracker.check_marked();
         EXPECT_EQ(alloc_count, allocated<int>);
         test_vec_std_vec_equality(vec, std_vec);
         test_vec_std_vec_equality(vec_copy, std_vec);
@@ -278,12 +292,14 @@ namespace {
     TEST_F(vector_test, push_back_lvalue_basic_test) {
         vector_type vec;
         constructor_stub constructor_stub;
+        this -> tracker.mark();
         vec.push_back(constructor_stub);
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::default_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::move_constructor_invocation_count, 0);
         EXPECT_EQ(vec.size(), 1);
-    }*/
+    }
 
     template<typename T>
     void test_vec_std_vec_operability(vector<T, tracking_allocator<T> >& vec, std::vector<T>& standard) {
@@ -324,7 +340,10 @@ namespace {
 
     TEST_F(vector_test, push_back_rvalue_basic_test) {
         vector_type vec;
-        vec.push_back(constructor_stub());
+        constructor_stub stub;
+        this -> tracker.mark();
+        vec.push_back(std::move(stub));
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::default_constructor_invocation_count, 1);
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 0);
         EXPECT_EQ(constructor_stub::move_constructor_invocation_count, 1);
@@ -356,7 +375,9 @@ namespace {
         vector_type vec;
         vec.push_back(constructor_stub());
         EXPECT_EQ(constructor_stub::destructor_invocation_count, 1);
+        this -> tracker.mark();
         vec.pop_back();
+        this -> tracker.check_marked();
         // Once when the temporary constructor_stub goes out of scope
         // Once in pop_back()
         EXPECT_EQ(constructor_stub::destructor_invocation_count, 2);
@@ -542,11 +563,13 @@ namespace {
     }
 
     TEST_F(vector_test, clear_test) {
-        vector<int> vec;
+        vector_type vec;
         for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(i);
         }
+        this -> tracker.mark();
         vec.clear();
+        this -> tracker.check_marked();
         EXPECT_TRUE(vec.empty());
     }
 
@@ -577,7 +600,10 @@ namespace {
         for (int i = 0; i < SMALL_LIMIT; ++i) {
             vec.push_back(constructor_stub(i));
         }
-        vec.insert(vec.begin(), constructor_stub(SPECIAL_VALUE));
+        constructor_stub stub(SPECIAL_VALUE);
+        this -> tracker.mark();
+        vec.insert(vec.begin(), stub);
+        this -> tracker.check_marked();
         EXPECT_EQ(vec[0].id, SPECIAL_VALUE);
         for (int i = 0; i < SMALL_LIMIT; ++i) {
             EXPECT_EQ(vec[i + 1].id, i);
@@ -611,12 +637,37 @@ namespace {
         test_vec_std_vec_equality(vec, std_vec);        
     }
 
+    TEST_F(vector_test, insert_fill_small_batch_test) {
+        vector_type vec(SMALL_LIMIT);
+        std::vector<constructor_stub> standard(SMALL_LIMIT);
+        for (int i = 0; i < MEDIUM_LIMIT; i += SMALL_LIMIT) {
+            vec.insert(vec.begin() + vec.size() / 2, SMALL_LIMIT, constructor_stub(i));
+            standard.insert(standard.begin() + standard.size() / 2, SMALL_LIMIT, constructor_stub(i));
+            test_vec_std_vec_equality(vec, standard);
+        }
+    }
+
+    TEST_F(vector_test, insert_fill_exception_safety_test) {
+        vector_type vec;
+        std::vector<constructor_stub> std_vec = set_up_for_exception(vec);
+        tracking_allocator<constructor_stub>::set_allocate_throw(true);
+        try {
+            vec.insert(vec.begin() + vec.size() / 2, SMALL_LIMIT, constructor_stub(SPECIAL_VALUE));
+            FAIL();
+        } catch (std::bad_alloc const&) {
+            tracking_allocator<constructor_stub>::set_allocate_throw(false);
+        }
+        test_vec_std_vec_operability(vec, std_vec);
+    }
+
     TEST_F(vector_test, insert_range_forward_iterator_basic_test) {
         vector_type vec(SMALL_LIMIT);
         std::vector<constructor_stub> src(SMALL_LIMIT);
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         size_t insert_index = SMALL_LIMIT / 2;
+        this -> tracker.mark();
         vec.insert(vec.begin() + insert_index, src.begin(), src.end());
+        this -> tracker.check_marked();
         std_vec.insert(std_vec.begin() + insert_index, src.begin(), src.end());
         test_vec_std_vec_equality(vec, std_vec);        
     }
@@ -632,6 +683,22 @@ namespace {
             tracking_allocator<constructor_stub>::set_allocate_throw(false);
         }
         test_vec_std_vec_operability(vec, std_vec);
+    }
+
+    TEST_F(vector_test, insert_range_forward_move_iterator_basic_test) {
+        vector_type vec(SMALL_LIMIT);
+        std::vector<constructor_stub> src(SMALL_LIMIT);
+        std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
+        size_t insert_index = SMALL_LIMIT / 2;
+        std_vec.insert(std_vec.begin() + insert_index, src.begin(), src.end());
+        this -> tracker.mark();
+        int copy_constructor_count = constructor_stub::copy_constructor_invocation_count;
+        int assignment_count = constructor_stub::assignment_operator_invocation_count;
+        vec.insert(vec.begin() + insert_index, std::make_move_iterator(src.begin()), std::make_move_iterator(src.end()));
+        EXPECT_EQ(copy_constructor_count, constructor_stub::copy_constructor_invocation_count);
+        EXPECT_EQ(assignment_count, constructor_stub::assignment_operator_invocation_count);
+        this -> tracker.check_marked();
+        test_vec_std_vec_equality(vec, std_vec);
     }
 
     TEST_F(vector_test, insert_range_forward_iterator_return_value_test) {
@@ -745,7 +812,9 @@ namespace {
         std::vector<constructor_stub> std_vec(vec.begin(), vec.end());
         size_t erase_start = SMALL_LIMIT / 4;
         size_t erase_end = SMALL_LIMIT - erase_start;
+        this -> tracker.mark();
         vec.erase(vec.begin() + erase_start, vec.begin() + erase_end);
+        this -> tracker.check_marked();
         std_vec.erase(std_vec.begin() + erase_start, std_vec.begin() + erase_end);
         test_vec_std_vec_equality(vec, std_vec);
     }
@@ -799,9 +868,103 @@ namespace {
 
     TEST_F(vector_test, resize_test) {
         vector_type vec;
+        this -> tracker.mark();
         vec.resize(SMALL_LIMIT);
+        this -> tracker.check_marked();
         EXPECT_EQ(constructor_stub::default_constructor_invocation_count, SMALL_LIMIT);
         EXPECT_EQ(vec.size(), SMALL_LIMIT);
+    }
+
+    TEST_F(vector_test, copy_only_constructor_test) {
+        using copy_only_vector_type = vector<copy_only_constructor_stub, tracking_allocator<copy_only_constructor_stub>>;
+        copy_only_vector_type vec1;
+        copy_only_vector_type vec2(SMALL_LIMIT);
+        copy_only_constructor_stub stub;
+        copy_only_vector_type vec3(SMALL_LIMIT, stub);
+        copy_only_vector_type vec4(vec3.begin(), vec3.end());
+        copy_only_vector_type vec5(vec4);
+        copy_only_vector_type vec6(std::move(vec5));
+    }
+
+    TEST_F(vector_test, copy_only_operation_test) {
+        vector<copy_only_constructor_stub, tracking_allocator<copy_only_constructor_stub> > vec;
+        std::vector<constructor_stub> standard;
+        vec.insert(vec.begin(), copy_only_constructor_stub(SPECIAL_VALUE));
+        standard.insert(standard.begin(), constructor_stub(SPECIAL_VALUE));
+        copy_only_constructor_stub stub(SPECIAL_VALUE2);
+        constructor_stub mirror(SPECIAL_VALUE2);
+        vec.push_back(stub);
+        standard.push_back(mirror);
+        vec.push_back(copy_only_constructor_stub(stub));
+        standard.push_back(constructor_stub(mirror));
+        vec.emplace_back(stub);
+        standard.emplace_back(mirror);
+        for (std::size_t i = 0; i < MEDIUM_LIMIT; ++i) {
+            vec.push_back(random_number());
+            standard.push_back(vec.back().id);
+        }
+        std::vector<int> nums(SMALL_LIMIT, SPECIAL_VALUE);
+
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, SMALL_LIMIT, mirror);
+        // If the iterator's value type is not the same as the vector value type, we don't care whether the vector value type
+        // has a valid copy or move constructor
+        vec.insert(vec.begin() + vec.size() / 2, nums.begin(), nums.end());
+        vec.insert(vec.begin() + vec.size() / 2, std::make_move_iterator(nums.begin()), std::make_move_iterator(nums.end()));
+        vec.insert(vec.begin() + vec.size() / 2, SMALL_LIMIT, stub);
+        EXPECT_EQ(standard.size(), vec.size());
+        for (std::size_t i = 0; i < standard.size(); ++i) {
+            EXPECT_EQ(vec[i].id, standard[i].id);
+        }
+        vec.erase(vec.begin() + vec.size() / 3, vec.end());
+        vec.pop_back();
+    }
+
+    TEST_F(vector_test, move_only_constructor_test) {
+        using move_only_vector_type = vector<move_only_constructor_stub, tracking_allocator<move_only_constructor_stub>>;
+        move_only_vector_type vec1;
+        move_only_vector_type vec2(SMALL_LIMIT);
+        move_only_vector_type vec3(std::make_move_iterator(vec2.begin()), std::make_move_iterator(vec2.end()));
+        move_only_vector_type vec4(std::move(vec3));
+        EXPECT_TRUE(vec3.empty());
+    }
+
+    TEST_F(vector_test, move_only_operation_test) {
+        vector<move_only_constructor_stub, tracking_allocator<move_only_constructor_stub>> vec;
+        std::vector<constructor_stub> standard;
+        vec.insert(vec.begin(), move_only_constructor_stub(SPECIAL_VALUE));
+        standard.insert(standard.begin(), constructor_stub(SPECIAL_VALUE));
+        vec.push_back(move_only_constructor_stub(SPECIAL_VALUE2));
+        standard.push_back(constructor_stub(SPECIAL_VALUE2));
+        vec.emplace_back(move_only_constructor_stub(SPECIAL_VALUE2));
+        standard.emplace_back(constructor_stub(SPECIAL_VALUE2));
+        for (std::size_t i = 0; i < MEDIUM_LIMIT; ++i) {
+            vec.push_back(random_number());
+            standard.push_back(vec.back().id);
+        }
+        std::vector<int> nums(SMALL_LIMIT, SPECIAL_VALUE);
+        vector<move_only_constructor_stub, tracking_allocator<move_only_constructor_stub> > src(SMALL_LIMIT);
+        std::vector<constructor_stub> standard_src(SMALL_LIMIT);
+        for (int i = 0; i < SMALL_LIMIT; i++) {
+            src[i] = i;
+            standard_src[i] = i;
+        }
+
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, nums.begin(), nums.end());
+        standard.insert(standard.begin() + standard.size() / 2, standard_src.begin(), standard_src.end());
+        // If the iterator's value type is not the same as the vector value type, we don't care whether the vector value type
+        // has a valid copy or move constructor
+        vec.insert(vec.begin() + vec.size() / 2, nums.begin(), nums.end());
+        vec.insert(vec.begin() + vec.size() / 2, std::make_move_iterator(nums.begin()), std::make_move_iterator(nums.end()));
+        vec.insert(vec.begin() + vec.size() / 2, std::make_move_iterator(src.begin()), std::make_move_iterator(src.end()));
+        EXPECT_EQ(standard.size(), vec.size());
+        for (std::size_t i = 0; i < standard.size(); ++i) {
+            EXPECT_EQ(vec[i].id, standard[i].id);
+        }
+        vec.erase(vec.begin() + vec.size() / 3, vec.end());
+        vec.pop_back();
     }
 
     TEST_F(vector_test, swap_test) {

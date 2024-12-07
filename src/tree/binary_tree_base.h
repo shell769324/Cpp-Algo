@@ -34,8 +34,8 @@ protected:
     using const_pointer = std::allocator_traits<Allocator>::const_pointer;
     using iterator = binary_tree_iterator<NodeType>;
     using const_iterator = binary_tree_iterator<constify<value_type, NodeType> >;
-    using reverse_iterator = binary_tree_iterator<NodeType, true>;
-    using const_reverse_iterator = binary_tree_iterator<constify<value_type, NodeType>, true>;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     using node_type = NodeType;
     using node_allocator_type = typename alloc_traits::rebind_alloc<node_type>;
@@ -46,6 +46,9 @@ protected:
     Compare comp;
     node_allocator_type node_allocator;
 
+    node_type* sentinel;
+    node_type* begin_node;
+    std::size_t element_count;
 
     constexpr static const char EXISTS = 0x2;
     constexpr static const char IS_LEFT_CHILD = 0x1;
@@ -64,18 +67,75 @@ protected:
     }
 
 public:
-    binary_tree_base() = default;
+    binary_tree_base() 
+        : sentinel(node_type::construct_sentinel(node_allocator)),
+          begin_node(sentinel),
+          element_count(0) { }
     
     binary_tree_base(const Compare& comp, const Allocator& allocator) 
-        : comp(comp), node_allocator(allocator) { }
+        : comp(comp), 
+          node_allocator(allocator),
+          sentinel(node_type::construct_sentinel(node_allocator)),
+          begin_node(sentinel),
+          element_count(0) { }
+
+    binary_tree_base(const binary_tree_base& other)
+        : key_of(other.key_of),
+          comp(other.comp), 
+          node_allocator(other.node_allocator),
+          sentinel(node_type::construct_sentinel(node_allocator)),
+          element_count(other.element_count) {
+        if (other.sentinel -> left_child) {
+            sentinel -> link_left_child(other.sentinel -> left_child -> deep_clone(node_allocator));
+        }
+        begin_node = sentinel -> get_leftmost_descendant();
+    }
 
     binary_tree_base(const binary_tree_base& other, const Allocator& allocator) 
-        : key_of(other.key_of), comp(other.comp), node_allocator(allocator) { }
+        : key_of(other.key_of), 
+          comp(other.comp), 
+          node_allocator(allocator),
+          sentinel(node_type::construct_sentinel(node_allocator)),
+          element_count(other.element_count) {
+        if (other.sentinel -> left_child) {
+            sentinel -> link_left_child(other.sentinel -> left_child -> deep_clone(node_allocator));
+        }
+        begin_node = sentinel -> get_leftmost_descendant();
+    }
+
+    binary_tree_base(binary_tree_base&& other) 
+        : key_of(std::move(other.key_of)), 
+          comp(std::move(other.comp)), 
+          node_allocator(other.node_allocator),
+          sentinel(other.sentinel),
+          begin_node(other.begin_node),
+          element_count(other.element_count) {
+        other.sentinel = nullptr;
+        other.begin_node = nullptr;
+        other.element_count = 0;
+    }
 
     binary_tree_base(binary_tree_base&& other, const Allocator& allocator) 
-        : key_of(std::move(other.key_of)), comp(std::move(other.comp)), node_allocator(allocator) { }
+        : key_of(std::move(other.key_of)), 
+          comp(std::move(other.comp)), 
+          node_allocator(allocator),
+          sentinel(other.sentinel),
+          begin_node(other.begin_node),
+          element_count(other.element_count) {
+        other.sentinel = nullptr;
+        other.begin_node = nullptr;
+        other.element_count = 0;
+    }
 
-    virtual ~binary_tree_base() = default;
+    virtual ~binary_tree_base() noexcept {
+        // If this tree was moved, its sentinel is null
+        if (sentinel == nullptr) {
+            return;
+        }
+        // Destroy and deallocate all nodes
+        clear();
+        node_alloc_traits::deallocate(node_allocator, sentinel, 1);
+    }
 
     /**
      * @brief Get a pointer to the underlying node type
@@ -84,62 +144,14 @@ public:
         return static_cast<TreeType*>(this);
     }
 
-    NodeType* find(NodeType* root, const K& key) const {
-        NodeType* curr = root;
-        while (curr != nullptr) {
-            int result = this -> key_comp_wrapper(key, key_of(curr -> value));
-            if (result == 0) {
-                return curr;
-            }
-            if (result < 0) {
-                curr = curr -> left_child.get();
-            } else {
-                curr = curr -> right_child.get();
-            }
-        }
-        return nullptr;
-    }
 
-    NodeType* upper_bound(NodeType* root, const K& key) const {
-        NodeType* curr = root;
-        NodeType* res = nullptr;
-        while (curr != nullptr) {
-            int result = this -> key_comp_wrapper(key, key_of(curr -> value));
-            if (result < 0) {
-                res = curr;
-                curr = curr -> left_child.get();
-            } else {
-                curr = curr -> right_child.get();
-            }
-        }
-        return res;
-    }
-
-    NodeType* lower_bound(NodeType* root, const K& key) const {
-        NodeType* curr = root;
-        NodeType* res = nullptr;
-        while (curr != nullptr) {
-            int result = this -> key_comp_wrapper(key, key_of(curr -> value));
-            if (result == 0) {
-                return curr;
-            }
-            if (result < 0) {
-                res = curr;
-                curr = curr -> left_child.get();
-            } else {
-                curr = curr -> right_child.get();
-            }
-        }
-        return res;
-    }
-
+protected:
     /**
      * @brief Get the node that would be the parent of the new node when the
      *        given key is inserted
      * 
      * No insertion is performed
      * 
-     * @param root the root of the tree
      * @param key the key to insert
      * @return std::pair<NodeType*, char> a pair of the node and a char flag
      * 
@@ -150,13 +162,13 @@ public:
      * Otherwise, the least significant bit is true if the new node would be the left
      * child of the parent node. It is false otherwise. The node will be the would-be parent
      */
-    std::pair<NodeType*, char> get_insertion_parent(NodeType* root, const K& key) const {
-        if (!root) {
-            throw std::invalid_argument("root must not be empty");
+    std::pair<NodeType*, char> get_insertion_parent(const K& key) const {
+        if (!sentinel -> left_child) {
+            return std::make_pair(sentinel, IS_LEFT_CHILD);
         }
-        NodeType* curr = root;
+        NodeType* curr = sentinel -> left_child.get();
         while (curr) {
-            int result = this -> key_comp_wrapper(key, key_of(curr -> value));
+            int result = key_comp_wrapper(key, key_of(curr -> value));
             if (result == 0) {
                 return std::make_pair(curr, EXISTS);
             }
@@ -176,6 +188,306 @@ public:
         }
         throw std::range_error("Impossible state");
     }
+
+    /**
+     * @brief Get the node that would be the parent of the new node when the
+     *        given key is inserted
+     * 
+     * No insertion is performed
+     * 
+     * @param hint an iterator pointing a location that is close to the location of insertion.
+     *             If the iterator is a wrong guess, this method will invoke the version without the hint
+     * @param key the key to insert
+     * @return std::pair<NodeType*, char> a pair of the node and a char flag
+     * 
+     * The flag has two fields, the second to the least significant bit is true if
+     * the key already exists. In this case, the least significant bit will be false
+     * The node will be the node that has the equal key
+     * 
+     * Otherwise, the least significant bit is true if the new node would be the left
+     * child of the parent node. It is false otherwise. The node will be the would-be parent
+     */
+    std::pair<NodeType*, char> get_insertion_parent(const_iterator hint, const K& key) const {
+        int comp_result = hint == cend() ? -1 : key_comp_wrapper(key, key_of(*hint));
+        if (comp_result == 0) {
+            return std::make_pair(hint.node, EXISTS);
+        }
+        if (comp_result < 0) {
+            if (hint == cbegin()) {
+                return std::make_pair(hint.node, IS_LEFT_CHILD);
+            }
+            const_iterator hint_prev = std::prev(hint);
+            int hint_prev_comp_result = key_comp_wrapper(key, key_of(*hint_prev));
+            if (hint_prev_comp_result == 0) {
+                return std::make_pair(hint_prev.node, EXISTS);
+            }
+            // If it is even less than the greatest value less than hint, we will give up
+            if (hint_prev_comp_result < 0) {
+                return get_insertion_parent(key);
+            }
+            // Otherwise, the value prior to hint and hint bound the new key
+            // We insert this node
+            // For any two adjacent iterators (i.e. one is the std::prev of another)
+            // one of them must have the insertion location of the new key unoccupied
+            if (hint.node -> left_child == nullptr) {
+                return std::make_pair(hint.node, IS_LEFT_CHILD);
+            }
+            return std::make_pair(hint_prev.node, 0);
+        }
+        const_iterator hint_next = std::next(hint);
+        if (hint_next == cend()) {
+            return std::make_pair(hint.node, 0);
+        }
+        int hint_next_comp_result = key_comp_wrapper(key, key_of(*hint_next));
+        if (hint_next_comp_result == 0) {
+            return std::make_pair(hint_next.node, EXISTS);
+        }
+        // If the key is greater than the least value greater than hint, we give up
+        if (hint_next_comp_result > 0) {
+            return get_insertion_parent(key);
+        }
+        if (hint.node -> right_child == nullptr) {
+            return std::make_pair(hint.node, 0);
+        }
+        return std::make_pair(hint_next.node, IS_LEFT_CHILD);
+    }
+
+    void update_begin_node(node_type* new_node) {
+        if (begin_node == sentinel || this -> comp(key_of(new_node -> value), key_of(begin_node -> value))) {
+            begin_node = new_node;
+        }
+    }
+
+public:
+    /**
+     * @brief Get a copy of the associated allocator
+     */
+    allocator_type get_allocator() const noexcept {
+        return allocator_type(node_allocator);
+    }
+
+    /**
+     * @brief Test if a tree is empty
+     */
+    bool empty() const noexcept {
+        return element_count == 0;
+    }
+
+    /**
+     * @brief Get the number of elements in the tree
+     */
+    std::size_t size() const noexcept {
+        return element_count;
+    }
+
+    /**
+     * @brief Get an iterator to the smallest element
+     */
+    iterator begin() noexcept {
+        return iterator(begin_node);
+    }
+
+    /**m
+     * @brief Get a constant iterator to the smallest element
+     */
+    const_iterator begin() const noexcept {
+        return const_iterator(begin_node);
+    }
+
+    /**
+     * @brief Get a constant iterator to the smallest element
+     */
+    const_iterator cbegin() const noexcept {
+        return const_iterator(begin_node);
+    }
+
+    /**
+     * @brief Get an iterator to one past the greatest element
+     */
+    iterator end() noexcept {
+        return iterator(sentinel);
+    }
+
+    /**
+     * @brief Get a constant iterator to one past the greatest element
+     */
+    const_iterator end() const noexcept {
+        return const_iterator(sentinel);
+    }
+
+    /**
+     * @brief Get a constant iterator to one past the greatest element
+     */
+    const_iterator cend() const noexcept {
+        return const_iterator(sentinel);
+    }
+
+    /**
+     * @brief Get an reverse iterator to the greatest element
+     */
+    reverse_iterator rbegin() noexcept {
+        return reverse_iterator(end());
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to the greatest element
+     */
+    const_reverse_iterator rbegin() const noexcept {
+        return const_reverse_iterator(cend());
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to the greatest element
+     */
+    const_reverse_iterator crbegin() const noexcept {
+        return rbegin();
+    }
+
+    /**
+     * @brief Get a reverse iterator to one past the smallest element
+     */
+    reverse_iterator rend() noexcept {
+        return reverse_iterator(begin());
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to one past the smallest element
+     */
+    const_reverse_iterator rend() const noexcept {
+        return const_reverse_iterator(cbegin());
+    }
+
+    /**
+     * @brief Get a constant reverse iterator to one past the smallest element
+     */
+    const_reverse_iterator crend() const noexcept {
+        return rend();
+    }
+
+    /**
+     * @brief Remove all elements in this tree
+     */
+    void clear() noexcept {
+        if (sentinel -> left_child) {
+            sentinel -> left_child.release() -> deep_destroy(node_allocator);
+            begin_node = sentinel;
+            element_count = 0;
+        }
+    }
+
+    /**
+     * @brief Get the iterator to an element given a key
+     * 
+     * @param key the key to look up
+     * @return an iterator to the element if it exists,
+     *         the end iterator otherwise
+     */
+    iterator find(const key_type& key) {
+        return iterator(std::as_const(*this).find(key));
+    }
+
+    /**
+     * @brief Get the iterator to an element given a key
+     * 
+     * @param key the key to look up
+     * @return a constant iterator to the element if it exists,
+     *         the end iterator otherwise
+     */
+    const_iterator find(const key_type& key) const {
+        NodeType* curr = sentinel -> left_child.get();
+        while (curr != nullptr) {
+            int result = this -> key_comp_wrapper(key, key_of(curr -> value));
+            if (result == 0) {
+                return const_iterator(curr);
+            }
+            if (result < 0) {
+                curr = curr -> left_child.get();
+            } else {
+                curr = curr -> right_child.get();
+            }
+        }
+        return cend();
+    }
+
+    /**
+     * @brief Get the iterator to the smallest element greater than
+     *        a given key
+     * 
+     * @param key the inclusive upper bound
+     * @return an iterator to such element if it exists,
+     *         the end iterator otherwise
+     */
+    iterator upper_bound(const key_type& key) {
+        return iterator(std::as_const(*this).upper_bound(key));
+    }
+
+    /**
+     * @brief Get the iterator to the smallest element greater than
+     *        a given key
+     * 
+     * @param key the inclusive upper bound
+     * @return a const iterator to such element if it exists,
+     *         the end iterator otherwise
+     */
+    const_iterator upper_bound(const key_type& key) const {
+        NodeType* curr = sentinel -> left_child.get();
+        NodeType* res = nullptr;
+        while (curr != nullptr) {
+            int result = this -> key_comp_wrapper(key, key_of(curr -> value));
+            if (result < 0) {
+                res = curr;
+                curr = curr -> left_child.get();
+            } else {
+                curr = curr -> right_child.get();
+            }
+        }
+        if (res == nullptr) {
+            return cend();
+        }
+        return const_iterator(res);
+    }
+
+    /**
+     * @brief Get the iterator to the smallest element greater than or equal to
+     *        a given key
+     * 
+     * @param key the inclusive lower bound
+     * @return an iterator to such element if it exists,
+     *         the end iterator otherwise
+     */
+    iterator lower_bound(const key_type& key) {
+        return iterator(std::as_const(*this).lower_bound(key));
+    }
+
+    /**
+     * @brief Get the iterator to the smallest element greater than or equal to
+     *        a given key
+     * 
+     * @param key the inclusive lower bound
+     * @return a const iterator to such element if it exists,
+     *         the end iterator otherwise
+     */
+    const_iterator lower_bound(const key_type& key) const {
+        NodeType* curr = sentinel -> left_child.get();
+        NodeType* res = nullptr;
+        while (curr != nullptr) {
+            int result = this -> key_comp_wrapper(key, key_of(curr -> value));
+            if (result == 0) {
+                return curr;
+            }
+            if (result < 0) {
+                res = curr;
+                curr = curr -> left_child.get();
+            } else {
+                curr = curr -> right_child.get();
+            }
+        }
+        if (!res) {
+            return cend();
+        }
+        return const_iterator(res);
+    }
+
 
 private:
     /**
@@ -326,6 +638,9 @@ public:
         std::swap(key_of, other.key_of);
         std::swap(comp, other.comp);
         std::swap(node_allocator, other.node_allocator);
+        std::swap(sentinel, other.sentinel);
+        std::swap(element_count, other.element_count);
+        std::swap(begin_node, other.begin_node);
     }
 
     template<std::forward_iterator ForwardIt>
@@ -368,6 +683,10 @@ public:
             return false;
         }
         return true;
+    }
+
+    bool __is_begin_node_correct() const noexcept {
+        return begin_node == sentinel -> get_leftmost_descendant();
     }
 };
 
