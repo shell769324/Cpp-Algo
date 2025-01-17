@@ -43,7 +43,7 @@ is eliminated by sharing the same class as the regular iterator and using `const
 ![push_back](../generated/deque/push_back.png)
 ![push_front](../generated/deque/push_front.png)
 
-Pushing at both ends are significantly faster than the gcc implementation in all benchmarks except for the `push_front char` one. 
+Pushing at both ends are  faster than the gcc implementation in all benchmarks except for the `push_front char` one. 
 This is due to an additional rearrangement implementation. Both my implementation and gcc one used chunk based map. When we 
 try to add on one end but there is no more room, gcc implementation tries to center all elements by shifting them to the center. 
 Moving is not cheap unless the value type implements a fast move constructor/assignment operator. My implementation rearranges 

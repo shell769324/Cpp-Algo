@@ -1,4 +1,4 @@
-# Deque benchmark
+# Set benchmark
 Four types of elements are tested. They are described below. Both my and gcc sets are compiled with `Release` which uses O3 optimization.
 Due to the unpredictable nature of tree data structures, I defined 18 (a random number I picked) different orders to insert the same values.
 This eliminates the advantage of certain implementation seen in a particular favorable insertion order.
