@@ -63,14 +63,7 @@ namespace {
             tracking_allocator<typename T::regular_type::node_type>::check();
             tracking_allocator<typename T::copy_only_type::node_type>::check();
             tracking_allocator<typename T::move_only_type::node_type>::check();
-        }
-        public:
-        static void print_set(const T& set) {
-            std::cout << "Printing set of size " << set.size() << std::endl;
-            for (const auto& stub : set) {
-                std::cout << stub.id << std::endl;
-            }
-        }    
+        } 
     };
 
     int do_action_lottery(int find = 2, int insert = 2, int remove = 0) {
@@ -148,6 +141,16 @@ namespace {
                 }
                 EXPECT_TRUE(set.__is_valid());
             }
+            mark_constructor_counts();
+            set.insert(stub);
+            check_constructor_counts(0, 0, 0);
+            EXPECT_EQ(set.size(), i + 1);
+            if (i % skip == 0) {
+                for (int j = 0; j <= i; ++j) {
+                    EXPECT_TRUE(set.contains(stubs[j]));
+                }
+                EXPECT_TRUE(set.__is_valid());
+            }
             ++i;
         }
     }
@@ -167,7 +170,7 @@ namespace {
             check_constructor_counts();
             --curr_size;
             EXPECT_EQ(set.find(stub), set.cend());
-            if (curr_size % skip == 0 && size == 10) {
+            if (curr_size % skip == 0) {
                 EXPECT_TRUE(set.__is_valid());
             }
         }
@@ -609,6 +612,7 @@ namespace {
     TYPED_TEST_P(set_test, clear_test) {
         auto stubs = get_random_stub_vector(SMALL_LIMIT);
         typename TypeParam::regular_type set(stubs.begin(), stubs.end());
+        EXPECT_TRUE(set.__is_valid());
         set.clear();
         EXPECT_TRUE(set.empty());
         EXPECT_TRUE(set.__is_valid());
@@ -664,6 +668,82 @@ namespace {
 
     TYPED_TEST_P(set_test, insert_find_stress_test) {
         insert_find_test<typename TypeParam::regular_type>(this -> tracker, MEDIUM_LIMIT);
+    }
+
+    template<typename Set>
+    void insert_hint_equal_test_helper(int hint_delta) {
+        Set set;
+        typename Set::value_type element(SMALL_LIMIT / 2);
+        for (std::size_t i = 0; i < SMALL_LIMIT; ++i) {
+            set.emplace(i);
+        }
+        mark_constructor_counts();
+        auto it = set.insert(std::next(set.begin(), SMALL_LIMIT / 2 + hint_delta), element);
+        check_constructor_counts();
+        EXPECT_EQ(it, set.find(SMALL_LIMIT / 2));
+        EXPECT_TRUE(set.__is_valid());
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_equal_hint_test) {
+        insert_hint_equal_test_helper<typename TypeParam::regular_type>(0);
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_equal_prev_hint_test) {
+        insert_hint_equal_test_helper<typename TypeParam::regular_type>(-1);
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_equal_next_hint_test) {
+        insert_hint_equal_test_helper<typename TypeParam::regular_type>(1);
+    }
+
+    template<typename Set>
+    void insert_hint_success_test_helper(int hint_delta) {
+        Set set;
+        typename Set::value_type element(SMALL_LIMIT / 2);
+        for (std::size_t i = 0; i < SMALL_LIMIT; ++i) {
+            set.emplace(i);
+        }
+        set.erase(SMALL_LIMIT / 2);
+        mark_constructor_counts();
+        auto it = set.insert(std::next(set.begin(), SMALL_LIMIT / 2 + hint_delta), element);
+        EXPECT_TRUE(set.contains(SMALL_LIMIT / 2));
+        check_constructor_counts(0, 1, 0);
+        EXPECT_TRUE(set.__is_valid());
+        EXPECT_EQ(it, set.find(SMALL_LIMIT / 2));
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_prev_bound_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(0);
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_overshoot_hint_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(1);
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_right_bound_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(-1);
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_undershoot_hint_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(-2);
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_begin_hint_test) {
+        typename TypeParam::regular_type set;
+        set.emplace(1);
+        constructor_stub stub(0);
+        set.insert(set.begin(), stub);
+        EXPECT_TRUE(set.contains(0));
+        EXPECT_TRUE(set.__is_valid());
+    }
+
+    TYPED_TEST_P(set_test, insert_hint_end_hint_test) {
+        typename TypeParam::regular_type set;
+        set.emplace(0);
+        constructor_stub stub(1);
+        set.insert(set.end(), stub);
+        EXPECT_TRUE(set.contains(1));
+        EXPECT_TRUE(set.__is_valid());
     }
 
     TYPED_TEST_P(set_test, insert_range_test) {
@@ -1409,6 +1489,15 @@ namespace {
         insert_find_intermediate_test,
         insert_find_stress_test,
         insert_range_test,
+        insert_hint_equal_hint_test,
+        insert_hint_equal_next_hint_test,
+        insert_hint_equal_prev_hint_test,
+        insert_hint_overshoot_hint_test,
+        insert_hint_prev_bound_test,
+        insert_hint_right_bound_test,
+        insert_hint_undershoot_hint_test,
+        insert_hint_begin_hint_test,
+        insert_hint_end_hint_test,
         emplace_lvalue_test,
         emplace_rvalue_test,
         emplace_id_forward_test,

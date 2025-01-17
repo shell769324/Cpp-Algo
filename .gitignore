@@ -1,6 +1,7 @@
 src/experimental/
 src/cmake_install.cmake
 src/CMakeFiles/
+benchmark/generated/**/*.json
 CMakeFiles/
 build/
 src/Makefile

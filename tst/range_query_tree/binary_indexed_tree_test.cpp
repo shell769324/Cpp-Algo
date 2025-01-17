@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "range_query_tree/binary_indexed_tree.h"
+#include "src/range_query_tree/binary_indexed_tree.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/tracking_allocator.h"
 #include "tst/utility/common.h"
@@ -38,8 +38,8 @@ namespace {
     using constructor_stub_tree = binary_indexed_tree<constructor_stub, std::plus<constructor_stub>, plus_inverse, tracking_allocator<constructor_stub> >;
 
 
-    static const matrix_type mat1({{0.8, 1.6}, {1, 0.5}});
-    static const matrix_type mat2({{1.2, 0.7}, {1.3, 0.3}});
+    static const matrix_type mat1({{0.8, 1.6}, {-1, 0.5}});
+    static const matrix_type mat2({{1.2, 0.7}, {-1.3, 0.3}});
     static constexpr int SMALL_LIMIT = 10;
     static constexpr int LIMIT = 10000;
 

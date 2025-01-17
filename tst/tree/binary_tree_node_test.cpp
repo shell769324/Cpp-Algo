@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "tree/binary_tree_node.h"
+#include "src/tree/binary_tree_node.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/tree/tree_test_util.h"
 #include "tst/tree/binary_tree_node_util.h"
@@ -32,8 +32,8 @@ namespace {
             return node1 == nullptr && node2 == nullptr;
         }
         return node1 -> value.id == node2 -> value.id &&
-               is_equal_nodes(node1 -> left_child.get(), node2 -> left_child.get()) &&
-               is_equal_nodes(node1 -> right_child.get(), node2 -> right_child.get());
+               is_equal_nodes(node1 -> left_child, node2 -> left_child) &&
+               is_equal_nodes(node1 -> right_child, node2 -> right_child);
     }
 
     TEST_F(binary_tree_node_test, construct_sentinel_test) {
@@ -101,8 +101,8 @@ namespace {
 
     TEST_F(binary_tree_node_test, is_left_child_test) {
         tree_ptr_type node = make_tree();
-        node -> left_child = node_type::unique_ptr_type(node_type::construct(allocator));
-        node -> right_child = node_type::unique_ptr_type(node_type::construct(allocator));
+        node -> left_child = node_type::construct(allocator);
+        node -> right_child = node_type::construct(allocator);
         node -> left_child -> parent = node.get();
         node -> right_child -> parent = node.get();
         EXPECT_TRUE(node -> left_child -> is_left_child());
@@ -126,22 +126,19 @@ namespace {
     TEST_F(binary_tree_node_test, link_left_child_raw_ptr_test) {
         node_type* left_child = node_type::construct(allocator);
         tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> link_left_child(left_child);
+        node -> link_left_child(left_child);
         is_parent_left_child_test(node.get(), left_child);
-        EXPECT_EQ(prev_child, nullptr);
     }
 
-    TEST_F(binary_tree_node_test, safe_link_left_child_raw_ptr_test) {
+    TEST_F(binary_tree_node_test, nullable_link_left_child_raw_ptr_test) {
         node_type* left_child = node_type::construct(allocator);
         tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> safe_link_left_child(left_child);
+        node -> nullable_link_left_child(left_child);
         is_parent_left_child_test(node.get(), left_child);
-        EXPECT_EQ(prev_child, nullptr);
-        prev_child = node -> safe_link_left_child(nullptr);
-        EXPECT_EQ(node -> left_child.get(), nullptr);
+        node -> nullable_link_left_child(nullptr);
+        EXPECT_EQ(node -> left_child, nullptr);
         EXPECT_EQ(left_child -> parent, nullptr);
-        EXPECT_EQ(prev_child, left_child);
-        prev_child -> destroy(allocator);
+        left_child -> destroy(allocator);
     }
 
     TEST_F(binary_tree_node_test, link_left_child_raw_ptr_replacing_test) {
@@ -149,65 +146,27 @@ namespace {
         tree_ptr_type node = make_tree();
         node -> link_left_child(left_child1);
         node_type* left_child2 = node_type::construct(allocator);
-        node_type* prev_child = node -> link_left_child(left_child2);
+        node -> link_left_child(left_child2);
         is_parent_left_child_test(node.get(), left_child2);
-        EXPECT_EQ(prev_child, left_child1);
-        EXPECT_EQ(left_child1 -> parent, nullptr);
-        left_child1 -> destroy(allocator);
-    }
-
-    TEST_F(binary_tree_node_test, link_left_child_unique_ptr_test) {
-        node_type* left_child = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> link_left_child(node_type::unique_ptr_type(left_child));
-        is_parent_left_child_test(node.get(), left_child);
-        EXPECT_EQ(prev_child, nullptr);
-    }
-
-    TEST_F(binary_tree_node_test, safe_link_left_child_unique_ptr_test) {
-        node_type* left_child = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> safe_link_left_child(node_type::unique_ptr_type(left_child));
-        is_parent_left_child_test(node.get(), left_child);
-        EXPECT_EQ(prev_child, nullptr);
-        prev_child = node -> safe_link_left_child(node_type::unique_ptr_type(nullptr));
-        EXPECT_EQ(node -> left_child.get(), nullptr);
-        EXPECT_EQ(left_child -> parent, nullptr);
-        EXPECT_EQ(prev_child, left_child);
-        left_child -> destroy(allocator);
-    }
-
-    TEST_F(binary_tree_node_test, link_left_child_unique_ptr_replacing_test) {
-        node_type* left_child1 = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node -> link_left_child(node_type::unique_ptr_type(left_child1));
-        node_type* left_child2 = node_type::construct(allocator);
-        node_type* prev_child = node -> link_left_child(node_type::unique_ptr_type(left_child2));
-        is_parent_left_child_test(node.get(), left_child2);
-        EXPECT_EQ(prev_child, left_child1);
-        EXPECT_EQ(left_child1 -> parent, nullptr);
         left_child1 -> destroy(allocator);
     }
 
     TEST_F(binary_tree_node_test, link_right_child_raw_ptr_test) {
         node_type* right_child = node_type::construct(allocator);
         tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> link_right_child(right_child);
+        node -> link_right_child(right_child);
         is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_child, nullptr);
     }
 
-    TEST_F(binary_tree_node_test, safe_link_right_child_raw_ptr_test) {
+    TEST_F(binary_tree_node_test, nullable_link_right_child_raw_ptr_test) {
         node_type* right_child = node_type::construct(allocator);
         tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> safe_link_right_child(right_child);
+        node -> nullable_link_right_child(right_child);
         is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_child, nullptr);
-        prev_child = node -> safe_link_right_child(nullptr);
-        EXPECT_EQ(node -> right_child.get(), nullptr);
+        node -> nullable_link_right_child(nullptr);
+        EXPECT_EQ(node -> right_child, nullptr);
         EXPECT_EQ(right_child -> parent, nullptr);
-        EXPECT_EQ(prev_child, right_child);
-        prev_child -> destroy(allocator);
+        right_child -> destroy(allocator);
     }
 
     TEST_F(binary_tree_node_test, link_right_child_raw_ptr_replacing_test) {
@@ -215,43 +174,8 @@ namespace {
         tree_ptr_type node = make_tree();
         node -> link_right_child(right_child1);
         node_type* right_child2 = node_type::construct(allocator);
-        node_type* prev_child = node -> link_right_child(right_child2);
+        node -> link_right_child(right_child2);
         is_parent_right_child_test(node.get(), right_child2);
-        EXPECT_EQ(prev_child, right_child1);
-        EXPECT_EQ(right_child1 -> parent, nullptr);
-        right_child1 -> destroy(allocator);
-    }
-
-    TEST_F(binary_tree_node_test, link_right_child_unique_ptr_test) {
-        node_type* right_child = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> link_right_child(node_type::unique_ptr_type(right_child));
-        is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_child, nullptr);
-    }
-
-    TEST_F(binary_tree_node_test, safe_link_right_child_unique_ptr_test) {
-        node_type* right_child = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node_type* prev_child = node -> safe_link_right_child(node_type::unique_ptr_type(right_child));
-        is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_child, nullptr);
-        prev_child = node -> safe_link_right_child(node_type::unique_ptr_type(nullptr));
-        EXPECT_EQ(node -> right_child.get(), nullptr);
-        EXPECT_EQ(right_child -> parent, nullptr);
-        EXPECT_EQ(prev_child, right_child);
-        right_child -> destroy(allocator);
-    }
-
-    TEST_F(binary_tree_node_test, link_right_child_unique_ptr_replacing_test) {
-        node_type* right_child1 = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node -> link_right_child(node_type::unique_ptr_type(right_child1));
-        node_type* right_child2 = node_type::construct(allocator);
-        node_type* prev_child = node -> link_right_child(node_type::unique_ptr_type(right_child2));
-        is_parent_right_child_test(node.get(), right_child2);
-        EXPECT_EQ(prev_child, right_child1);
-        EXPECT_EQ(right_child1 -> parent, nullptr);
         right_child1 -> destroy(allocator);
     }
 
@@ -259,36 +183,30 @@ namespace {
         node_type* left_child = node_type::construct(allocator);
         node_type* right_child = node_type::construct(allocator);
         tree_ptr_type node = make_tree();
-        node_type* prev_left_child = node -> link_child(left_child, true);
-        node_type* prev_right_child = node -> link_child(right_child, false);
+        node -> link_child(left_child, true);
+        node -> link_child(right_child, false);
         is_parent_left_child_test(node.get(), left_child);
         is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_left_child, nullptr);
-        EXPECT_EQ(prev_right_child, nullptr);
     }
 
-    TEST_F(binary_tree_node_test, safe_link_child_raw_ptr_test) {
+    TEST_F(binary_tree_node_test, nullable_link_child_raw_ptr_test) {
         node_type* left_child = node_type::construct(allocator);
         node_type* right_child = node_type::construct(allocator);
         tree_ptr_type node = make_tree();
-        node_type* prev_left_child = node -> safe_link_child(left_child, true);
-        node_type* prev_right_child = node -> safe_link_child(right_child, false);
+        node -> nullable_link_child(left_child, true);
+        node -> nullable_link_child(right_child, false);
         is_parent_left_child_test(node.get(), left_child);
         is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_left_child, nullptr);
-        EXPECT_EQ(prev_right_child, nullptr);
-        prev_left_child = node -> safe_link_child(nullptr, true);
-        prev_right_child = node -> safe_link_child(nullptr, false);
+        node -> nullable_link_child(nullptr, true);
+        node -> nullable_link_child(nullptr, false);
         
-        EXPECT_EQ(node -> left_child.get(), nullptr);
+        EXPECT_EQ(node -> left_child, nullptr);
         EXPECT_EQ(left_child -> parent, nullptr);
-        EXPECT_EQ(prev_left_child, left_child);
 
-        EXPECT_EQ(node -> right_child.get(), nullptr);
+        EXPECT_EQ(node -> right_child, nullptr);
         EXPECT_EQ(right_child -> parent, nullptr);
-        EXPECT_EQ(prev_right_child, right_child);   
-        prev_left_child -> destroy(allocator);
-        prev_right_child -> destroy(allocator);
+        left_child -> destroy(allocator);
+        right_child -> destroy(allocator);
     }
 
     TEST_F(binary_tree_node_test, link_child_raw_ptr_replacing_test) {
@@ -299,71 +217,10 @@ namespace {
         node -> link_child(right_child1, false);
         node_type* left_child2 = node_type::construct(allocator);
         node_type* right_child2 = node_type::construct(allocator);
-        node_type* prev_left_child = node -> link_child(left_child2, true);
-        node_type* prev_right_child = node -> link_child(right_child2, false);
+        node -> link_child(left_child2, true);
+        node -> link_child(right_child2, false);
         is_parent_left_child_test(node.get(), left_child2);
         is_parent_right_child_test(node.get(), right_child2);
-        EXPECT_EQ(prev_left_child, left_child1);
-        EXPECT_EQ(left_child1 -> parent, nullptr);
-        EXPECT_EQ(prev_right_child, right_child1);
-        EXPECT_EQ(right_child1 -> parent, nullptr);
-        left_child1 -> destroy(allocator);
-        right_child1 -> destroy(allocator);
-    }
-
-    TEST_F(binary_tree_node_test, link_child_unique_ptr_test) {
-        node_type* left_child = node_type::construct(allocator);
-        node_type* right_child = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node_type* prev_left_child = node -> link_child(node_type::unique_ptr_type(left_child), true);
-        node_type* prev_right_child = node -> link_child(node_type::unique_ptr_type(right_child), false);
-        is_parent_left_child_test(node.get(), left_child);
-        is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_left_child, nullptr);
-        EXPECT_EQ(prev_right_child, nullptr);
-    }
-
-    TEST_F(binary_tree_node_test, safe_link_child_unique_ptr_test) {
-        node_type* left_child = node_type::construct(allocator);
-        node_type* right_child = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node_type* prev_left_child = node -> safe_link_child(node_type::unique_ptr_type(left_child), true);
-        node_type* prev_right_child = node -> safe_link_child(node_type::unique_ptr_type(right_child), false);
-        is_parent_left_child_test(node.get(), left_child);
-        is_parent_right_child_test(node.get(), right_child);
-        EXPECT_EQ(prev_left_child, nullptr);
-        EXPECT_EQ(prev_right_child, nullptr);
-
-        prev_left_child = node -> safe_link_child(node_type::unique_ptr_type(nullptr), true);
-        prev_right_child = node -> safe_link_child(node_type::unique_ptr_type(nullptr), false);
-        
-        EXPECT_EQ(node -> left_child.get(), nullptr);
-        EXPECT_EQ(left_child -> parent, nullptr);
-        EXPECT_EQ(prev_left_child, left_child);
-
-        EXPECT_EQ(node -> right_child.get(), nullptr);
-        EXPECT_EQ(right_child -> parent, nullptr);
-        EXPECT_EQ(prev_right_child, right_child);   
-        prev_left_child -> destroy(allocator);
-        prev_right_child -> destroy(allocator);
-    }
-
-    TEST_F(binary_tree_node_test, link_child_unique_ptr_replacing_test) {
-        node_type* left_child1 = node_type::construct(allocator);
-        node_type* right_child1 = node_type::construct(allocator);
-        tree_ptr_type node = make_tree();
-        node -> link_child(node_type::unique_ptr_type(left_child1), true);
-        node -> link_child(node_type::unique_ptr_type(right_child1), false);
-        node_type* left_child2 = node_type::construct(allocator);
-        node_type* right_child2 = node_type::construct(allocator);
-        node_type* prev_left_child = node -> link_child(node_type::unique_ptr_type(left_child2), true);
-        node_type* prev_right_child = node -> link_child(node_type::unique_ptr_type(right_child2), false);
-        is_parent_left_child_test(node.get(), left_child2);
-        is_parent_right_child_test(node.get(), right_child2);
-        EXPECT_EQ(prev_left_child, left_child1);
-        EXPECT_EQ(left_child1 -> parent, nullptr);
-        EXPECT_EQ(prev_right_child, right_child1);
-        EXPECT_EQ(right_child1 -> parent, nullptr);
         left_child1 -> destroy(allocator);
         right_child1 -> destroy(allocator);
     }
@@ -376,42 +233,42 @@ namespace {
         node -> link_right_child(right_child);
         left_child -> orphan_self();
         right_child -> orphan_self();
-        EXPECT_EQ(node -> left_child.get(), nullptr);
+        EXPECT_EQ(node -> left_child, nullptr);
         EXPECT_EQ(left_child -> parent, nullptr);
-        EXPECT_EQ(node -> right_child.get(), nullptr);
+        EXPECT_EQ(node -> right_child, nullptr);
         EXPECT_EQ(right_child -> parent, nullptr);
         left_child -> destroy(allocator);
         right_child -> destroy(allocator);
     }
 
     TEST_F(binary_tree_node_test, get_leftmost_descendant_test) {
-        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0));
         EXPECT_EQ(root -> get_leftmost_descendant() -> value.id, 0);
     }
 
     TEST_F(binary_tree_node_test, get_rightmost_descendant_test) {
-        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0));
         EXPECT_EQ(root -> get_rightmost_descendant() -> value.id, SMALL_LIMIT - 2);
     }
 
     TEST_F(binary_tree_node_test, next_test) {
-        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0));
         node_type* curr = root -> get_leftmost_descendant();
-        for (int i = 0; i < SMALL_LIMIT - 1; ++i) {
+        for (int i = 0; i < SMALL_LIMIT - 2; ++i) {
             EXPECT_EQ(curr -> value.id, i);
             curr = curr -> next();
         }
-        EXPECT_EQ(curr, nullptr);
+        EXPECT_EQ(curr -> value.id, SMALL_LIMIT - 2);
     }
 
     TEST_F(binary_tree_node_test, prev_test) {
-        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0).get());
+        tree_ptr_type root(create_perfectly_balance_tree(SMALL_LIMIT - 1, 0));
         node_type* curr = root -> get_rightmost_descendant();
-        for (int i = SMALL_LIMIT - 2; i >= 0; --i) {
+        for (int i = SMALL_LIMIT - 2; i >= 1; --i) {
             EXPECT_EQ(curr -> value.id, i);
             curr = curr -> prev();
         }
-        EXPECT_EQ(curr, nullptr);
+        EXPECT_EQ(curr -> value.id, 0);
     }
 
     TEST_F(binary_tree_node_test, clone_test) {
@@ -421,7 +278,7 @@ namespace {
     }
 
     void deep_clone_test(int size) {
-        tree_ptr_type root(create_perfectly_balance_tree(size, 0).get());
+        tree_ptr_type root(create_perfectly_balance_tree(size, 0));
         tree_ptr_type root_copy(root -> deep_clone(allocator));
         EXPECT_TRUE(is_equal_nodes(root.get(), root_copy.get()));
         EXPECT_TRUE(root_copy -> __is_parent_child_link_mutual());

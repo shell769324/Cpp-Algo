@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "tree/avl_tree.h"
+#include "src/tree/avl_tree.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/tree/tree_test_util.h"
 #include "tst/utility/tracking_allocator.h"
@@ -169,22 +169,22 @@ namespace {
         D -> link_right_child(E);
         P -> link_left_child(B);
         int old_constructor_invocation_count = constructor_stub::constructor_invocation_count;
-        B -> rotate_left();
+        B -> rotate_left<true>();
         EXPECT_EQ(old_constructor_invocation_count, constructor_stub::constructor_invocation_count);
         EXPECT_TRUE(A -> is_leaf());
         if (has_C) {
             EXPECT_TRUE(C -> is_leaf());
-            EXPECT_EQ(B -> right_child.get(), C);
+            EXPECT_EQ(B -> right_child, C);
         } else {
-            EXPECT_EQ(B -> right_child.get(), nullptr);
+            EXPECT_EQ(B -> right_child, nullptr);
         }
         EXPECT_TRUE(E -> is_leaf());
-        EXPECT_EQ(B -> left_child.get(), A);
+        EXPECT_EQ(B -> left_child, A);
         EXPECT_EQ(B -> height, 2);
-        EXPECT_EQ(D -> left_child.get(), B);
+        EXPECT_EQ(D -> left_child, B);
         EXPECT_EQ(D -> height, 3);
-        EXPECT_EQ(D -> right_child.get(), E);
-        EXPECT_EQ(P -> left_child.get(), D);
+        EXPECT_EQ(D -> right_child, E);
+        EXPECT_EQ(P -> left_child, D);
         EXPECT_EQ(P -> height, 4);
     }
 
@@ -222,21 +222,21 @@ namespace {
         D -> link_right_child(E);
         P -> link_right_child(D);
         int old_constructor_invocation_count = constructor_stub::constructor_invocation_count;
-        D -> rotate_right();
+        D -> rotate_right<true>();
         EXPECT_EQ(old_constructor_invocation_count, constructor_stub::constructor_invocation_count);
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_TRUE(E -> is_leaf());
-        EXPECT_EQ(B -> left_child.get(), A);
+        EXPECT_EQ(B -> left_child, A);
         EXPECT_EQ(B -> height, 3);
         if (has_C) {
             EXPECT_TRUE(C -> is_leaf());
-            EXPECT_EQ(D -> left_child.get(), C);
+            EXPECT_EQ(D -> left_child, C);
         } else {
-            EXPECT_EQ(D -> left_child.get(), nullptr);
+            EXPECT_EQ(D -> left_child, nullptr);
         }
         EXPECT_EQ(D -> height, 2);
-        EXPECT_EQ(D -> right_child.get(), E);
-        EXPECT_EQ(P -> right_child.get(), B);
+        EXPECT_EQ(D -> right_child, E);
+        EXPECT_EQ(P -> right_child, B);
         EXPECT_EQ(P -> height, 4);
     }
 
@@ -266,24 +266,24 @@ namespace {
         P -> link_right_child(D);
         int old_constructor_invocation_count = constructor_stub::constructor_invocation_count;
         for (int i = 0; i < SMALL_LIMIT; ++i) {
-            D -> rotate_right();
-            B -> rotate_left();
+            D -> rotate_right<true>();
+            B -> rotate_left<true>();
         }
-        D -> rotate_right();
+        D -> rotate_right<true>();
         EXPECT_EQ(old_constructor_invocation_count, constructor_stub::constructor_invocation_count);
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_TRUE(E -> is_leaf());
-        EXPECT_EQ(B -> left_child.get(), A);
+        EXPECT_EQ(B -> left_child, A);
         EXPECT_EQ(B -> height, 3);
         if (has_C) {
             EXPECT_TRUE(C -> is_leaf());
-            EXPECT_EQ(D -> left_child.get(), C);
+            EXPECT_EQ(D -> left_child, C);
         } else {
-            EXPECT_EQ(D -> left_child.get(), nullptr);
+            EXPECT_EQ(D -> left_child, nullptr);
         }
         EXPECT_EQ(D -> height, 2);
-        EXPECT_EQ(D -> right_child.get(), E);
-        EXPECT_EQ(P -> right_child.get(), B);
+        EXPECT_EQ(D -> right_child, E);
+        EXPECT_EQ(P -> right_child, B);
         EXPECT_EQ(P -> height, 4);
     }
 
@@ -314,15 +314,15 @@ namespace {
         B -> link_left_child(A);
         C -> link_left_child(B);
         P -> link_left_child(C);
-        C -> rebalance_left();
+        C -> rebalance_left<true>();
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> right_child.get(), C);
+        EXPECT_EQ(B -> left_child, A);
+        EXPECT_EQ(B -> right_child, C);
         EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
         EXPECT_EQ(C -> height, 1);
-        EXPECT_EQ(P -> left_child.get(), B);
+        EXPECT_EQ(P -> left_child, B);
         // Parent height shouldn't change
         EXPECT_EQ(P -> height, 4);
     }
@@ -354,24 +354,24 @@ namespace {
         E -> link_left_child(C);
         E -> link_right_child(F);
         P -> link_left_child(E);
-        E -> rebalance_left();
+        E -> rebalance_left<true>();
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> right_child.get(), nullptr);
+        EXPECT_EQ(B -> left_child, A);
+        EXPECT_EQ(B -> right_child, nullptr);
         EXPECT_EQ(B -> height, 2);
-        EXPECT_EQ(C -> left_child.get(), B);
-        EXPECT_EQ(C -> right_child.get(), E);
+        EXPECT_EQ(C -> left_child, B);
+        EXPECT_EQ(C -> right_child, E);
         EXPECT_EQ(C -> height, 3);
 
         EXPECT_TRUE(D -> is_leaf());
         EXPECT_EQ(D -> height, 1);
-        EXPECT_EQ(E -> left_child.get(), D);
-        EXPECT_EQ(E -> right_child.get(), F);
+        EXPECT_EQ(E -> left_child, D);
+        EXPECT_EQ(E -> right_child, F);
         EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
         EXPECT_EQ(F -> height, 1);
-        EXPECT_EQ(P -> left_child.get(), C);
+        EXPECT_EQ(P -> left_child, C);
         EXPECT_EQ(P -> height, 5);
     }
 
@@ -394,15 +394,15 @@ namespace {
         A -> link_right_child(B);
         C -> link_left_child(A);
         P -> link_left_child(C);
-        C -> rebalance_left();
+        C -> rebalance_left<true>();
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> right_child.get(), C);
+        EXPECT_EQ(B -> left_child, A);
+        EXPECT_EQ(B -> right_child, C);
         EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
         EXPECT_EQ(C -> height, 1);
-        EXPECT_EQ(P -> left_child.get(), B);
+        EXPECT_EQ(P -> left_child, B);
         EXPECT_EQ(P -> height, 4);
     }
 
@@ -433,24 +433,24 @@ namespace {
         E -> link_left_child(B);
         E -> link_right_child(F);
         P -> link_left_child(E);
-        E -> rebalance_left();
+        E -> rebalance_left<true>();
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> right_child.get(), C);
+        EXPECT_EQ(B -> left_child, A);
+        EXPECT_EQ(B -> right_child, C);
         EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
         EXPECT_EQ(C -> height, 1);
 
-        EXPECT_EQ(D -> left_child.get(), B);
-        EXPECT_EQ(D -> right_child.get(), E);
+        EXPECT_EQ(D -> left_child, B);
+        EXPECT_EQ(D -> right_child, E);
         EXPECT_EQ(D -> height, 3);
-        EXPECT_EQ(E -> left_child.get(), nullptr);
-        EXPECT_EQ(E -> right_child.get(), F);
+        EXPECT_EQ(E -> left_child, nullptr);
+        EXPECT_EQ(E -> right_child, F);
         EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
         EXPECT_EQ(F -> height, 1);
-        EXPECT_EQ(P -> left_child.get(), D);
+        EXPECT_EQ(P -> left_child, D);
         EXPECT_EQ(P -> height, 5);
     }
 
@@ -474,16 +474,16 @@ namespace {
         A -> link_right_child(B);    
         B -> link_right_child(C);
         P -> link_right_child(A);
-        A -> rebalance_right();
+        A -> rebalance_right<true>();
 
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> right_child.get(), C);
+        EXPECT_EQ(B -> left_child, A);
+        EXPECT_EQ(B -> right_child, C);
         EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
         EXPECT_EQ(C -> height, 1);
-        EXPECT_EQ(P -> right_child.get(), B);
+        EXPECT_EQ(P -> right_child, B);
         EXPECT_EQ(P -> height, 4);
     }
 
@@ -514,25 +514,25 @@ namespace {
         D -> link_right_child(E);
         E -> link_right_child(F);
         P -> link_right_child(B);
-        B -> rebalance_right();
+        B -> rebalance_right<true>();
 
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> right_child.get(), C);
+        EXPECT_EQ(B -> left_child, A);
+        EXPECT_EQ(B -> right_child, C);
         EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
         EXPECT_EQ(C -> height, 1);
 
-        EXPECT_EQ(D -> left_child.get(), B);
-        EXPECT_EQ(D -> right_child.get(), E);
+        EXPECT_EQ(D -> left_child, B);
+        EXPECT_EQ(D -> right_child, E);
         EXPECT_EQ(D -> height, 3);
-        EXPECT_EQ(E -> right_child.get(), F);
+        EXPECT_EQ(E -> right_child, F);
         EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
         EXPECT_EQ(F -> height, 1);
 
-        EXPECT_EQ(P -> right_child.get(), D);
+        EXPECT_EQ(P -> right_child, D);
         EXPECT_EQ(P -> height, 5);
     }
 
@@ -555,16 +555,16 @@ namespace {
         A -> link_right_child(C);
         C -> link_left_child(B);
         P -> link_right_child(A);
-        A -> rebalance_right();
+        A -> rebalance_right<true>();
 
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
-        EXPECT_EQ(B -> right_child.get(), C);
+        EXPECT_EQ(B -> left_child, A);
+        EXPECT_EQ(B -> right_child, C);
         EXPECT_EQ(B -> height, 2);
         EXPECT_TRUE(C -> is_leaf());
         EXPECT_EQ(C -> height, 1);
-        EXPECT_EQ(P -> right_child.get(), B);
+        EXPECT_EQ(P -> right_child, B);
         EXPECT_EQ(P -> height, 4);
     }
 
@@ -595,24 +595,24 @@ namespace {
         E -> link_left_child(C);
         E -> link_right_child(F);
         P -> link_right_child(B);
-        B -> rebalance_right();
+        B -> rebalance_right<true>();
 
         EXPECT_TRUE(A -> is_leaf());
         EXPECT_EQ(A -> height, 1);
-        EXPECT_EQ(B -> left_child.get(), A);
+        EXPECT_EQ(B -> left_child, A);
         EXPECT_EQ(B -> height, 2);
-        EXPECT_EQ(C -> left_child.get(), B);
-        EXPECT_EQ(C -> right_child.get(), E);
+        EXPECT_EQ(C -> left_child, B);
+        EXPECT_EQ(C -> right_child, E);
         EXPECT_EQ(C -> height, 3);
 
         EXPECT_TRUE(D -> is_leaf());
         EXPECT_EQ(D -> height, 1);
-        EXPECT_EQ(E -> left_child.get(), D);
-        EXPECT_EQ(E -> right_child.get(), F);
+        EXPECT_EQ(E -> left_child, D);
+        EXPECT_EQ(E -> right_child, F);
         EXPECT_EQ(E -> height, 2);
         EXPECT_TRUE(F -> is_leaf());
         EXPECT_EQ(F -> height, 1);
-        EXPECT_EQ(P -> right_child.get(), C);
+        EXPECT_EQ(P -> right_child, C);
         EXPECT_EQ(P -> height, 5);
     }
 }

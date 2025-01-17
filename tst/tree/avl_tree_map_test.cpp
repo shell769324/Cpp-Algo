@@ -1,12 +1,11 @@
 #include "gtest/gtest.h"
-#include "tree/avl_tree_map.h"
+#include "src/tree/avl_tree_map.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/copy_only_constructor_stub.h"
 #include "tst/utility/move_only_constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
 #include "tst/map_test.h"
 #include "tst/utility/tracking_allocator.h"
-#include <iostream>
 
 namespace {
     

@@ -324,7 +324,7 @@ public:
      * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
      */
     std::pair<iterator, bool> insert(const value_type& value) {
-        return tree.try_emplace(value.first, value);
+        return tree.insert(value);
     }
 
     /**
@@ -338,7 +338,7 @@ public:
      * The boolean is true if insertion succeeded, namely the key is not found, false otherwise
      */
     std::pair<iterator, bool> insert(value_type&& value) {
-        return tree.try_emplace(value.first, std::move(value));
+        return tree.insert(std::move(value));
     }
 
     /**
@@ -356,6 +356,32 @@ public:
     std::pair<iterator, bool> insert(P&& value)
         requires std::constructible_from<value_type, P> {
         return tree.emplace(std::forward<P>(value));
+    }
+
+    /**
+     * @brief Insert a single value to this map
+     * 
+     * @param pos   an iterator that is close to the insertion location of the new value. If the iterator
+     *              is far from insertion location, the value is inserted as if insert(value)
+     * @param value the value to be copied and inserted
+     * 
+     * @return an iterator to the inserted element, or to the element that prevented the insertion
+     */
+    iterator insert(const_iterator pos, const value_type& value) requires std::is_copy_constructible_v<value_type> {
+        return tree.insert(pos, value);
+    }
+
+    /**
+     * @brief Insert a single value to this map
+     * 
+     * @param pos   an iterator that is close to the insertion location of the new value. If the iterator
+     *              is far from insertion location, the value is inserted as if insert(std::move(value))
+     * @param value the value to be moved and inserted
+     * 
+     * @return an iterator to the inserted element, or to the element that prevented the insertion
+     */
+    iterator insert(const_iterator pos, value_type&& value) requires std::move_constructible<value_type> {
+        return tree.insert(pos, std::move(value));
     }
 
     /**

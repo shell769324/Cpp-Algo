@@ -1,10 +1,9 @@
 #include "gtest/gtest.h"
-#include "tree/avl_tree_set.h"
+#include "src/tree/avl_tree_set.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/copy_only_constructor_stub.h"
 #include "tst/utility/move_only_constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
-#include <iostream>
 #include "tst/utility/tracking_allocator.h"
 #include "tst/set_test.h"
 

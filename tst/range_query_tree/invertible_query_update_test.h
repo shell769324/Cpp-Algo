@@ -96,19 +96,6 @@ namespace {
         }
     }
 
-    template<typename Tree>
-    void is_correct(std::vector<matrix_type>& vec, Tree& tree, std::size_t gap) {
-        EXPECT_EQ(vec.size(), tree.size());
-        std::vector<constructor_stub>& prefixSums(vec.size());
-        std::partial_sum(vec.begin(), vec.end(), prefixSums.begin());
-        for (std::size_t d = 1; d <= vec.size(); ++d) {
-            for (std::size_t i = 0; i + d <= vec.size(); i += gap) {
-                std::size_t j = i + d;
-                EXPECT_EQ(tree.query(i, j), prefixSums[j - 1].id - (i == 0 ? 0 : prefixSums[i - 1].id));
-            }
-        }
-    }
-
     TYPED_TEST_P(invertible_query_update_test, identity_matrix_test) {
         using matrix_mult_tree_type = TypeParam::matrix_mult_tree_type;
         matrix_type identity_matrix({{1.0, 0}, {0, 1.0}});

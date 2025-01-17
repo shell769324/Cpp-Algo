@@ -62,13 +62,6 @@ namespace {
             tracking_allocator<typename T::copy_only_type::node_type>::check();
             tracking_allocator<typename T::move_only_type::node_type>::check();
         }
-
-        static void print_map(const T& map) {
-            std::cout << "Printing map of size " << map.size() << std::endl;
-            for (const auto& pair : map) {
-                std::cout << pair.first.id << ":" << pair.second.id << std::endl;
-            }
-        }    
     };
 
     template<typename Map>
@@ -800,6 +793,87 @@ namespace {
 
     TYPED_TEST_P(map_test, insert_find_stress_test) {
         insert_find_test<typename TypeParam::regular_type>(this -> tracker, MEDIUM_LIMIT);
+    }
+
+    template<typename Map>
+    void insert_hint_equal_test_helper(int hint_delta) {
+        Map map;
+        for (std::size_t i = 0; i < SMALL_LIMIT; ++i) {
+            map.emplace(std::piecewise_construct, std::tuple(i), std::tuple(i));
+        }
+        int val = SMALL_LIMIT / 2;
+        constructor_stub key(val);
+        constructor_stub value(-val);
+        auto it = map.insert(std::next(map.begin(), SMALL_LIMIT / 2 + hint_delta), 
+            typename Map::value_type(key, value));
+        EXPECT_TRUE(map.__is_valid());
+        EXPECT_EQ(it -> first, val);
+        EXPECT_EQ(it -> second, val);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_equal_hint_test) {
+        insert_hint_equal_test_helper<typename TypeParam::regular_type>(0);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_equal_prev_hint_test) {
+        insert_hint_equal_test_helper<typename TypeParam::regular_type>(-1);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_equal_next_hint_test) {
+        insert_hint_equal_test_helper<typename TypeParam::regular_type>(1);
+    }
+
+    template<typename Map>
+    void insert_hint_success_test_helper(int hint_delta) {
+        Map map;
+        for (std::size_t i = 0; i < SMALL_LIMIT; ++i) {
+            map.emplace(std::piecewise_construct, std::tuple(i), std::tuple(i));
+        }
+        map.erase(SMALL_LIMIT / 2);
+        int val = SMALL_LIMIT / 2;
+        constructor_stub key(val);
+        constructor_stub value(-val);
+        auto it = map.insert(std::next(map.begin(), SMALL_LIMIT / 2 + hint_delta), typename Map::value_type(key, value));
+        EXPECT_TRUE(map.contains(SMALL_LIMIT / 2));
+        EXPECT_TRUE(map.__is_valid());
+        EXPECT_EQ(it -> first, val);
+        EXPECT_EQ(it -> second, -val);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_prev_bound_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(0);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_overshoot_hint_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(1);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_right_bound_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(-1);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_undershoot_hint_test) {
+        insert_hint_success_test_helper<typename TypeParam::regular_type>(-2);
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_begin_hint_test) {
+        typename TypeParam::regular_type map;
+        map.emplace(std::piecewise_construct, std::tuple(1), std::tuple(1));
+        constructor_stub key(0);
+        constructor_stub value(0);
+        map.insert(map.begin(), std::make_pair(key, value));
+        EXPECT_EQ(0, map[0]);
+        EXPECT_TRUE(map.__is_valid());
+    }
+
+    TYPED_TEST_P(map_test, insert_hint_end_hint_test) {
+        typename TypeParam::regular_type map;
+        map.emplace(std::piecewise_construct, std::tuple(0), std::tuple(0));
+        constructor_stub key(1);
+        constructor_stub value(1);
+        map.insert(map.begin(), std::make_pair(key, value));
+        EXPECT_EQ(1, map[1]);
+        EXPECT_TRUE(map.__is_valid());
     }
 
     TYPED_TEST_P(map_test, insert_range_test) {
@@ -1624,6 +1698,15 @@ namespace {
         insert_return_value_test,
         insert_find_intermediate_test,
         insert_find_stress_test,
+        insert_hint_equal_hint_test,
+        insert_hint_equal_next_hint_test,
+        insert_hint_equal_prev_hint_test,
+        insert_hint_overshoot_hint_test,
+        insert_hint_prev_bound_test,
+        insert_hint_right_bound_test,
+        insert_hint_undershoot_hint_test,
+        insert_hint_begin_hint_test,
+        insert_hint_end_hint_test,
         insert_range_test,
         emplace_lvalue_test,
         emplace_rvalue_test,

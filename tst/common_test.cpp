@@ -3,9 +3,8 @@
 #include "tst/utility/copy_only_constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
 #include "tst/utility/tracking_allocator.h"
-#include "common.h"
+#include "src/common.h"
 #include <vector>
-#include <iostream>
 
 namespace {
     using namespace algo;
@@ -59,7 +58,7 @@ namespace {
 
     TEST_F(common_test, try_uninitialized_move_range_test) {
         constructor_stub* stubs = static_cast<constructor_stub*>(::operator new(SMALL_LIMIT * sizeof(constructor_stub)));
-        try_uninitialized_move(stub_iterator<constructor_stub>(SPECIAL_VALUE),
+        try_uninitialized_move<true>(stub_iterator<constructor_stub>(SPECIAL_VALUE),
             stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT), stubs, allocator);
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 0);
         verify_stub_ids(stubs, SMALL_LIMIT, SPECIAL_VALUE);
@@ -68,7 +67,7 @@ namespace {
 
     TEST_F(common_test, try_uninitialized_move_range_copy_test) {
         copy_only_constructor_stub* stubs = static_cast<copy_only_constructor_stub*>(::operator new(SMALL_LIMIT * sizeof(copy_only_constructor_stub)));
-        try_uninitialized_move(stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE),
+        try_uninitialized_move<false>(stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE),
             stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT), stubs, allocator);
         verify_stub_ids(stubs, SMALL_LIMIT, SPECIAL_VALUE);
         destroy_stubs(stubs, SMALL_LIMIT);
@@ -93,7 +92,7 @@ namespace {
 
     TEST_F(common_test, try_move_range_test) {
         constructor_stub stubs[SMALL_LIMIT];
-        try_move(stub_iterator<constructor_stub>(SPECIAL_VALUE),
+        try_move<false>(stub_iterator<constructor_stub>(SPECIAL_VALUE),
             stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT), stubs);
         EXPECT_EQ(constructor_stub::assignment_operator_invocation_count, 0);
         verify_stub_ids(stubs, SMALL_LIMIT, SPECIAL_VALUE);
@@ -101,13 +100,13 @@ namespace {
 
     TEST_F(common_test, try_move_range_copy_test) {
         copy_only_constructor_stub stubs[SMALL_LIMIT];
-        try_move(stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE),
+        try_move<true>(stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE),
             stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT), stubs);
         verify_stub_ids(stubs, SMALL_LIMIT, SPECIAL_VALUE);
     }
 
     TEST_F(common_test, try_move_construct_test) {
-        constructor_stub* stubs = try_move_construct(stub_iterator<constructor_stub>(SPECIAL_VALUE),
+        constructor_stub* stubs = try_move_construct<false>(stub_iterator<constructor_stub>(SPECIAL_VALUE),
             stub_iterator<constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT), SMALL_LIMIT, allocator);
         EXPECT_EQ(constructor_stub::copy_constructor_invocation_count, 0);
         verify_stub_ids(stubs, SMALL_LIMIT, SPECIAL_VALUE);
@@ -116,7 +115,7 @@ namespace {
 
     TEST_F(common_test, try_move_construct_copy_test) {
         tracking_allocator<copy_only_constructor_stub> copy_only_allocator;
-        copy_only_constructor_stub* stubs = try_move_construct(stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE),
+        copy_only_constructor_stub* stubs = try_move_construct<true>(stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE),
             stub_iterator<copy_only_constructor_stub>(SPECIAL_VALUE + SMALL_LIMIT), SMALL_LIMIT, copy_only_allocator);
         verify_stub_ids(stubs, SMALL_LIMIT, SPECIAL_VALUE);
         destroy_stubs(stubs, SMALL_LIMIT);

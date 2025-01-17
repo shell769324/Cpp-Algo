@@ -1,10 +1,10 @@
-#include <iostream>
 #include <vector>
 #include <utility>
 #include "constructor_stub.h"
 #include <format>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
+#pragma GCC diagnostic ignored "-Wterminate"
 
 namespace algo {
 

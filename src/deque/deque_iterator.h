@@ -18,12 +18,17 @@ private:
 
     non_const_T** outer_pointer;
     non_const_T* inner_pointer;
+    non_const_T* chunk_begin;
+    non_const_T* chunk_end;
 
 public:
-    deque_iterator() : deque_iterator(nullptr, nullptr) { }
+    deque_iterator() :
+        outer_pointer(nullptr), inner_pointer(nullptr),
+        chunk_begin(nullptr), chunk_end(chunk_begin + CHUNK_SIZE<T>) { }
 
     deque_iterator(non_const_T** outer_pointer, non_const_T* inner_pointer) :
-        outer_pointer(outer_pointer), inner_pointer(inner_pointer) { }
+        outer_pointer(outer_pointer), inner_pointer(inner_pointer),
+        chunk_begin(*outer_pointer), chunk_end(chunk_begin + CHUNK_SIZE<T>) { }
 
     deque_iterator(const deque_iterator& other) = default;
     deque_iterator(deque_iterator&& other) = default;
@@ -43,7 +48,8 @@ private:
      */
     explicit deque_iterator(const deque_iterator<const T, Reverse>& other)
         requires (!std::is_const_v<T>) : 
-        outer_pointer(other.outer_pointer), inner_pointer(other.inner_pointer) { }
+        outer_pointer(other.outer_pointer), inner_pointer(other.inner_pointer),
+        chunk_begin(*outer_pointer), chunk_end(chunk_begin + CHUNK_SIZE<T>) { }
 
 public:
     /**
@@ -53,7 +59,8 @@ public:
      */
     deque_iterator(const deque_iterator<non_const_T, Reverse>& other)
         requires std::is_const_v<T> : 
-        outer_pointer(other.outer_pointer), inner_pointer(other.inner_pointer) { }
+        outer_pointer(other.outer_pointer), inner_pointer(other.inner_pointer),
+        chunk_begin(*outer_pointer), chunk_end(chunk_begin + CHUNK_SIZE<T>) { }
 
     /**
      * @brief Convert a reverse iterator to a regular iterator or vice versa
@@ -61,10 +68,42 @@ public:
      * @param other an iterator that has opposite reverseness
      */
     deque_iterator(const deque_iterator<T, !Reverse>& other) :
-        outer_pointer(other.outer_pointer), inner_pointer(other.inner_pointer) { }
+        outer_pointer(other.outer_pointer), inner_pointer(other.inner_pointer),
+        chunk_begin(*outer_pointer), chunk_end(chunk_begin + CHUNK_SIZE<T>) { }
 
     deque_iterator& operator=(const deque_iterator& other) = default;
     deque_iterator& operator=(deque_iterator&& other) = default;
+
+private:
+    reference subscript_helper(difference_type pos) {
+        std::ptrdiff_t offset = inner_pointer - *outer_pointer + pos;
+        std::ptrdiff_t inner_offset = offset % CHUNK_SIZE<T>;
+        std::ptrdiff_t outer_offset = offset / CHUNK_SIZE<T> - (inner_offset < 0);
+        if (inner_offset < 0) {
+            inner_offset += CHUNK_SIZE<T>;
+        }
+        return outer_pointer[outer_offset][inner_offset];
+    }
+
+public:
+    reference operator[](difference_type pos) noexcept {
+        if constexpr (Reverse) {
+            return subscript_helper(-pos);
+        } else {
+            return subscript_helper(pos);
+        }
+    }
+
+    /**
+     * @brief Get a reference to the value at an offset
+     */
+    reference operator[](difference_type pos) const noexcept {
+        if constexpr (Reverse) {
+            return subscript_helper(-pos);
+        } else {
+            return subscript_helper(pos);
+        }
+    }
 
     /**
      * @brief Get a reference to current value
@@ -81,22 +120,32 @@ public:
     }
 
 private:
+    void to_next_chunk() noexcept {
+        ++outer_pointer;
+        inner_pointer = *outer_pointer;
+        chunk_begin = inner_pointer;
+        chunk_end = inner_pointer + CHUNK_SIZE<T>;
+    }
+
+    void to_prev_chunk() noexcept {
+        --outer_pointer;
+        chunk_begin = *outer_pointer;
+        inner_pointer = chunk_begin + CHUNK_SIZE<T>;
+        chunk_end = inner_pointer;
+    }
+
     void absolute_increment() noexcept {
-        if (inner_pointer - *outer_pointer == CHUNK_SIZE<T> - 1) {
-            ++outer_pointer;
-            inner_pointer = *outer_pointer;
-        } else {
-            ++inner_pointer;
+        ++inner_pointer;
+        if (inner_pointer == chunk_end) {
+            to_next_chunk();
         }
     }
 
     void absolute_decrement() noexcept {
-        if (inner_pointer == *outer_pointer) {
-            --outer_pointer;
-            inner_pointer = *outer_pointer + CHUNK_SIZE<T> - 1;
-        } else {
-            --inner_pointer;
+        if (inner_pointer == chunk_begin) {
+            to_prev_chunk();
         }
+        --inner_pointer;
     }
 
 public:
@@ -115,17 +164,30 @@ public:
     }
 
 private:
-    void increase(const int& delta) {
+    void increase(const int& delta) noexcept {
         if (delta == 0) {
             return;
         }
-        long offset = inner_pointer - *outer_pointer + delta;
+        long offset = inner_pointer - chunk_begin + delta;
         long inner_offset = offset % CHUNK_SIZE<T>;
         outer_pointer += offset / CHUNK_SIZE<T> - (inner_offset < 0);
         if (inner_offset < 0) {
             inner_offset += CHUNK_SIZE<T>;
         }
-        inner_pointer = *outer_pointer + inner_offset;
+        chunk_begin = *outer_pointer;
+        chunk_end = chunk_begin + CHUNK_SIZE<T>;
+        inner_pointer = chunk_begin + inner_offset;
+    }
+
+    reference plus_positive(std::size_t delta) const noexcept {
+        if (delta == 0) {
+            return *inner_pointer;
+        }
+        long offset = inner_pointer - chunk_begin + delta;
+        long inner_offset = offset % CHUNK_SIZE<T>;
+        long outer_offset = offset / CHUNK_SIZE<T>;
+        non_const_T* pos = *(outer_pointer + outer_offset) + inner_offset;
+        return *pos;
     }
 
 public:
@@ -230,7 +292,7 @@ public:
      */
     difference_type operator-(const deque_iterator& other) const noexcept {
         difference_type res = (outer_pointer - other.outer_pointer) * CHUNK_SIZE<T> + 
-            (inner_pointer - *outer_pointer) - (other.inner_pointer - *other.outer_pointer);
+            (inner_pointer - chunk_begin) - (other.inner_pointer - other.chunk_begin);
         if constexpr (Reverse) {
             return -res;
         }
@@ -251,6 +313,8 @@ public:
     void swap(deque_iterator& other) noexcept {
         std::swap(inner_pointer, other.inner_pointer);
         std::swap(outer_pointer, other.outer_pointer);
+        std::swap(chunk_begin, other.chunk_begin);
+        std::swap(chunk_end, other.chunk_end);
     }
 
     /**

@@ -1,7 +1,7 @@
 #pragma once
 #include "gtest/gtest.h"
 #include "tst/utility/common.h"
-#include "src/vector.h"
+#include "src/vector/vector.h"
 #include "src/thread_pool_executor/task.h"
 
 namespace {

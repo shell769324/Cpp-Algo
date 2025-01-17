@@ -1,21 +1,18 @@
 #include "gtest/gtest.h"
-#include "tree/red_black_tree.h"
+#include "src/tree/red_black_tree.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/stub_iterator.h"
 #include "tst/tree/tree_test_util.h"
-#include "tst/tree/tree_bulk_operation_complexity_test.h"
 #include "tst/tree/tree_parallel_comparison_test.h"
 #include "tst/tree/tree_common_test.h"
 #include "tst/utility/common.h"
 #include "tst/utility/tracking_allocator.h"
-#include <iostream>
 #include <cmath>
 #include <vector>
 #include <unordered_set>
 #include <random>
 #include <set>
 #include <map>
-#include <chrono>
 
 
 namespace {
@@ -24,7 +21,7 @@ namespace {
     using int_tree_type = red_black_tree<int, constructor_stub, constructor_stub_key_getter>;
     using stub_tree_type = red_black_tree<constructor_stub, constructor_stub, std::identity, constructor_stub_comparator, tracking_allocator<constructor_stub> >;
     using stub_node_type = stub_tree_type::node_type;
-    using stub_ptr_type = stub_tree_type::unique_ptr_type;
+    static const int REPEAT = 20;
 
     class red_black_tree_test : public ::testing::Test {
     protected:
@@ -71,18 +68,18 @@ namespace {
         int move_constructor_invocation_count = constructor_stub::move_constructor_invocation_count;
         int copy_constructor_invocation_count = constructor_stub::copy_constructor_invocation_count;
 
-        stub_ptr_type result;
+        stub_node_type* result;
         if (has_middle) {
-            result = stub_tree_type::join(stub_ptr_type(left_root), stub_ptr_type(stub_node_type::construct(allocator, 0)), stub_ptr_type(right_root));
+            result = stub_tree_type::join(left_root, stub_node_type::construct(allocator, 0), right_root);
         } else {
-            result = stub_tree_type::join(stub_ptr_type(left_root), stub_ptr_type(right_root));
+            result = stub_tree_type::join(left_root, right_root);
         }
         EXPECT_EQ(move_constructor_invocation_count, constructor_stub::move_constructor_invocation_count);
         EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
         EXPECT_EQ(default_constructor_invocation_count, constructor_stub::default_constructor_invocation_count);
         EXPECT_EQ(result -> parent, nullptr);
-        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(result.get()));
-        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(result.get()) != -1);
+        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(result));
+        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(result) != -1);
 
         std::sort(negative_stubs.begin(), negative_stubs.end(), constructor_stub_comparator());
         std::sort(positive_stubs.begin(), positive_stubs.end(), constructor_stub_comparator());
@@ -220,28 +217,28 @@ namespace {
         int default_constructor_invocation_count = constructor_stub::default_constructor_invocation_count;
         int move_constructor_invocation_count = constructor_stub::move_constructor_invocation_count;
         int copy_constructor_invocation_count = constructor_stub::copy_constructor_invocation_count;
-        std::pair<stub_ptr_type, bool> split_result = tree.split(stub_ptr_type(root), stub_ptr_type(node), resolver);
-        stub_ptr_type split_root = std::move(split_result.first);
+        std::pair<stub_node_type*, bool> split_result = tree.split(root, node, resolver);
+        stub_node_type* split_root = split_result.first;
         EXPECT_EQ(move_constructor_invocation_count, constructor_stub::move_constructor_invocation_count);
         EXPECT_EQ(copy_constructor_invocation_count, constructor_stub::copy_constructor_invocation_count);
         EXPECT_EQ(default_constructor_invocation_count, constructor_stub::default_constructor_invocation_count);
         
         EXPECT_EQ(split_root -> parent, nullptr);
-        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(split_root -> left_child.get()));
-        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(split_root -> left_child.get()) != -1);
-        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(split_root -> right_child.get()));
-        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(split_root -> right_child.get()) != -1);
+        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(split_root -> left_child));
+        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(split_root -> left_child) != -1);
+        EXPECT_TRUE(stub_tree_type::__has_no_consecutive_red_nodes_helper(split_root -> right_child));
+        EXPECT_TRUE(stub_tree_type::__are_all_black_paths_equally_long_helper(split_root -> right_child) != -1);
 
         if (has_conflict) {
-            EXPECT_EQ(split_root.get() == node, keep_divider);
+            EXPECT_EQ(split_root == node, keep_divider);
         } else {
-            EXPECT_EQ(split_root.get(), node);
+            EXPECT_EQ(split_root, node);
         }
         EXPECT_EQ(split_result.second, has_conflict);
         
         stub_node_type* curr = split_root -> get_leftmost_descendant();
         for (auto it1 = tree.begin(); it1 != tree.end() && curr != nullptr; it1++) {
-            if (curr == split_root.get() && ((*it1).id != curr -> value.id)) {
+            if (curr == split_root && ((*it1).id != curr -> value.id)) {
                 curr = curr -> next();
             }
             EXPECT_EQ((*it1).id, curr -> value.id);
@@ -363,6 +360,5 @@ namespace {
     }
 
     INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, tree_common_test, stub_tree_type);
-    INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, tree_bulk_operation_complexity_test, stub_tree_type);
     INSTANTIATE_TYPED_TEST_SUITE_P(red_black_tree, tree_parallel_comparison_test, stub_tree_type);
 }

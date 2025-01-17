@@ -1,8 +1,7 @@
-#include "thread_pool_executor/thread_pool_executor.h"
-#include "thread_pool_executor/task.h"
+#include "src/thread_pool_executor/thread_pool_executor.h"
+#include "src/thread_pool_executor/task.h"
 #include "gtest/gtest.h"
-#include "vector.h"
-#include <chrono>
+#include "src/vector/vector.h"
 
 namespace {
     using namespace algo;

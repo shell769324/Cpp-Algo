@@ -1,8 +1,34 @@
 #pragma once
 #include "allocator_aware_algorithms.h"
 #include "concepts.h"
+#include <cstring>
+#include <algorithm>
 
 namespace algo {
+
+/**
+ * @brief Check if a pair of input and output iterators are eligible for memcpy/memmove
+ * 
+ * Both must be pointer type with the same value type (the input value type may be additionally const qualified)
+ * The object must be trivially copy constructible and trivially destructible.
+ * The value type cannot be volatile
+ * 
+ * @tparam OutputIt the type of the output iterator
+ * @tparam InputIt the type of the input iterator
+ */
+template<typename OutputIt, typename InputIt>
+struct is_memcpyable {
+    static constexpr bool value = 
+        std::is_pointer_v<OutputIt> && std::is_pointer_v<InputIt> 
+        && std::is_same_v<std::remove_pointer_t<OutputIt>, std::remove_const_t<std::remove_pointer_t<InputIt>>>
+        && !std::is_volatile_v<std::remove_pointer_t<OutputIt> > 
+        && std::is_trivially_copy_constructible_v<std::iter_value_t<OutputIt> > 
+        && std::is_trivially_destructible_v<std::iter_value_t<OutputIt>>;
+};
+
+template<typename OutputIt, typename InputIt>
+inline constexpr bool is_memcpyable_v = is_memcpyable<OutputIt, InputIt>::value;
+
 /**
  * @brief memory deallocator
  * 
@@ -83,14 +109,16 @@ void try_uninitialized_move(T* pos, T&& value, Allocator& allocator) {
  * @param dest the output iterator to move to
  * @param allocator the allocator to construct new elements
  */
-template<std::input_iterator InputIt, std::forward_iterator NoThrowForwardIt, typename Allocator>
+template<bool NoThrowMove, std::input_iterator InputIt, std::forward_iterator NoThrowForwardIt, typename Allocator>
 NoThrowForwardIt try_uninitialized_move(InputIt first, InputIt last, NoThrowForwardIt dest, Allocator& allocator)
     requires nothrow_forward_output_iterator<NoThrowForwardIt, std::iter_value_t<InputIt> > {
     using value_type = std::iter_value_t<InputIt>;
-    if constexpr (std::is_move_constructible_v<value_type>) {
+    // If no throw move is requested, we will use the move constructor only if it is no throw. However, if the value 
+    // type doesn't have a copy constructor, we will have to use the move constructor anyway
+    if constexpr ((NoThrowMove && (std::is_nothrow_move_constructible_v<value_type> || !std::is_copy_constructible_v<value_type>))
+                  || (!NoThrowMove && std::is_move_constructible_v<value_type>)) {
         return uninitialized_move(first, last, dest, allocator);
     } else {
-        // If a nothrow move constructor doesn't exist, fall back to copy constructor
         return uninitialized_copy(first, last, dest, allocator);
     }
 }
@@ -131,20 +159,59 @@ try_move_return<T>::type try_move(T&& value) {
  * Otherwise, they are copy assigned
  * 
  * @tparam InputIt the type of the input iterator, needs to satisfy the std::input_iterator concept
- * @tparam OutputIt the output of the input iterator, needs to satisfy the nothrow_forward_output_iterator concept
+ * @tparam OutputIt the type of the output iterator, needs to satisfy the nothrow_forward_output_iterator concept
  * @param first an iterator pointing at the beginning of the range to move from
  * @param last an iterator pointing at one past the last element in the range to move from
  * @param dest the output iterator to move to
  */
-template<std::input_iterator InputIt, typename OutputIt>
+template<bool NoThrowMove, std::input_iterator InputIt, typename OutputIt>
 OutputIt try_move(InputIt first, InputIt last, OutputIt dest) 
     requires nothrow_forward_output_iterator<OutputIt, std::iter_value_t<InputIt> > {
     using value_type = std::iter_value_t<InputIt>;
-    if constexpr (std::is_move_assignable_v<value_type>) {
+    // If no throw move is requested, we will use the move assignment operator only if it is no throw. However, if the 
+    // value type doesn't have a copy assignment operator, we will have to use the move assignment operator anyway
+    if constexpr (is_memcpyable_v<OutputIt, InputIt>) {
+        std::ptrdiff_t count = last - first;
+        std::memmove(dest, first, count * sizeof(value_type));
+        return dest + count;
+    } else if constexpr ((NoThrowMove && (std::is_nothrow_move_assignable_v<value_type> || !std::is_copy_assignable_v<value_type>))
+                  || (!NoThrowMove && std::is_move_assignable_v<value_type>)) {
         return std::move(first, last, dest);
     } else {
-        // If a nothrow move constructor doesn't exist, fall back to copy constructor
+        // If a nothrow move assignment operator doesn't exist, fall back to copy assignment operator
         return std::copy(first, last, dest);
+    }
+}
+
+/**
+ * @brief move the elements from the range to an initialized memory area
+ * 
+ * If the type of the underyling data has a move assignment operator, the elements in the range are moved.
+ * Otherwise, they are copy assigned
+ * 
+ * @tparam InputIt the type of the input iterator, needs to satisfy the std::bidirectional_iterator concept
+ * @tparam OutputIt the type of the output iterator, needs to satisfy the nothrow_bidirectional_output_iterator concept
+ * @param first an iterator pointing at the beginning of the range to move from
+ * @param last an iterator pointing at one past the last element in the range to move from
+ * @param dest the output iterator to move tos
+ */
+template<bool NoThrowMove, std::bidirectional_iterator InputIt, typename OutputIt>
+OutputIt try_move_backwards(InputIt first, InputIt last, OutputIt d_last) 
+    requires nothrow_bidirectional_output_iterator<OutputIt, std::iter_value_t<InputIt> > {
+    using value_type = std::iter_value_t<InputIt>;
+    // If no throw move is requested, we will use the move assignment operator only if it is no throw. However, if the 
+    // value type doesn't have a copy assignment operator, we will have to use the move assignment operator anyway
+    if constexpr (is_memcpyable_v<OutputIt, InputIt>) {
+        std::ptrdiff_t count = last - first;
+        OutputIt dest = d_last - count;
+        std::memmove(dest, first, count * sizeof(value_type));
+        return dest;
+    } else if constexpr ((NoThrowMove && (std::is_nothrow_move_assignable_v<value_type> || !std::is_copy_assignable_v<value_type>))
+                         || (!NoThrowMove && std::is_move_assignable_v<value_type>)) {
+        return std::move_backward(first, last, d_last);
+    } else {
+        // If a nothrow move assignment operator doesn't exist, fall back to copy assignment operator
+        return std::copy_backward(first, last, d_last);
     }
 }
 
@@ -160,13 +227,13 @@ OutputIt try_move(InputIt first, InputIt last, OutputIt dest)
  * @param dest_size the size of the clone
  * @return pointer the clone
  */
-template<std::input_iterator InputIt, typename Allocator>
+template<bool NoThrowMove, std::input_iterator InputIt, typename Allocator>
 std::iter_value_t<InputIt>* try_move_construct(InputIt start, InputIt end, 
-                                                std::size_t dest_size, Allocator& allocator) {
+                                               std::size_t dest_size, Allocator& allocator) {
     using T = std::iter_value_t<InputIt>;
     T* dest = std::allocator_traits<Allocator>::allocate(allocator, dest_size);
     std::unique_ptr<T, deleter<T, Allocator> > cleaner(dest, deleter<T, Allocator>(dest_size, allocator));
-    try_uninitialized_move(start, end, dest, allocator);
+    try_uninitialized_move<NoThrowMove>(start, end, dest, allocator);
     cleaner.release();
     return dest;
 }
@@ -183,7 +250,7 @@ public:
     /**
      * @brief Get a const reference to the left element of a pair
      */
-    const T& operator()(const std::pair<const T, U>& pair) const {
+    const T& operator()(const std::pair<const T, U>& pair) const noexcept {
         return pair.first;
     }
 };
@@ -198,7 +265,7 @@ public:
     /**
      * @brief Always pick the first or the second value
      */
-    bool operator()(__attribute__((unused)) const T& value1, __attribute__((unused)) const T& value2) const {
+    bool operator()(__attribute__((unused)) const T& value1, __attribute__((unused)) const T& value2) const noexcept {
         return choose_first;
     }
 };

@@ -7,8 +7,8 @@ bool is_square_matrix_equal(const matrix_type& mat1, const matrix_type& mat2) no
     }
     for (std::size_t i = 0; i < mat1.size(); ++i) {
         for (std::size_t j = 0; j < mat1.matrix[0].size(); ++j) {
-            if (abs(mat2.matrix[i][j] - mat1.matrix[i][j]) / std::min(abs(mat1.matrix[i][j]), abs(mat2.matrix[i][j])) >= 1e-3 &&
-                abs(mat2.matrix[i][j] - mat1.matrix[i][j]) > 1e-5) {
+            if (std::abs(mat2.matrix[i][j] - mat1.matrix[i][j]) / std::min(std::abs(mat1.matrix[i][j]), std::abs(mat2.matrix[i][j])) >= 1e-3 &&
+                std::abs(mat2.matrix[i][j] - mat1.matrix[i][j]) > 1e-5) {
                 return false;
             }
         }

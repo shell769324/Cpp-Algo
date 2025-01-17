@@ -28,7 +28,7 @@ private:
     using alloc_traits = std::allocator_traits<Allocator>;
     using cleaner_type = std::unique_ptr<T, deleter<T, allocator_type> >;
     using subtree_type = std::tuple<T*, std::size_t, std::size_t>;
-    using subtree_allocator_type = typename alloc_traits::rebind_alloc<subtree_type>;
+    using subtree_allocator_type = typename alloc_traits::template rebind_alloc<subtree_type>;
     using subtree_unique_ptr = std::unique_ptr<subtree_type[], deleter<subtree_type, subtree_allocator_type> >;
     using initializer_type = segment_tree_initializer<T, Operator, Allocator>;
 

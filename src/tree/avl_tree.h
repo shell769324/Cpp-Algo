@@ -123,8 +123,9 @@ public:
      * 
      * @return avl_node* the node in place of this node
      */
+    template <bool Nullable>
     avl_node* rotate_left() noexcept {
-        avl_node* original_right_child = parent_type::rotate_left();
+        avl_node* original_right_child = parent_type::template rotate_left<Nullable>();
         update_height();
         original_right_child -> height = std::max(original_right_child -> height, (unsigned char) (height + 1));
         return original_right_child;
@@ -137,8 +138,9 @@ public:
      * 
      * @return avl_node* the node in place of this node
      */
+    template <bool Nullable>
     avl_node* rotate_right() noexcept {
-        avl_node* original_left_child = parent_type::rotate_right();
+        avl_node* original_left_child = parent_type::template rotate_right<Nullable>();
         update_height();
         original_left_child -> height = std::max(original_left_child -> height, (unsigned char) (height + 1));
         return original_left_child;
@@ -150,14 +152,15 @@ public:
      *
      * @return avl_node* the node in place of this node
      */
+    template <bool Nullable>
     avl_node* rebalance_left() noexcept {
         // If the left child is right heavy, we will need double rotation
         if (this -> left_child -> compute_balance_factor() < 0) {
             // The height of left child will remain the same.
             // We don't need to update the height of this node
-            this -> left_child -> rotate_left();
+            this -> left_child -> template rotate_left<Nullable>();
         }
-        return rotate_right();
+        return rotate_right<Nullable>();
     }
 
     /**
@@ -166,14 +169,15 @@ public:
      * 
      * @return avl_node* the node in place of this node
      */
+    template <bool Nullable>
     avl_node* rebalance_right() noexcept {
         // If the right child is left heavy, we will need double rotation
         if (this -> right_child -> compute_balance_factor() > 0) {
             // The height of right child will remain the same.
             // We don't need to update the height of this node
-            this -> right_child -> rotate_right();
+            this -> right_child -> template rotate_right<Nullable>();
         }
-        return rotate_left();
+        return rotate_left<Nullable>();
     }
 };
 
@@ -209,7 +213,7 @@ public:
     using reverse_iterator = base_type::reverse_iterator;
     using const_reverse_iterator = base_type::const_reverse_iterator;
     using node_type = base_type::node_type;
-    using unique_ptr_type = base_type::unique_ptr_type;
+    using set_op_return_type = base_type::set_op_return_type;
 
     using base_type::key_of;
     using base_type::comp;
@@ -220,6 +224,7 @@ public:
     using base_type::EXISTS;
     using base_type::IS_LEFT_CHILD;
     using base_type::get_insertion_parent;
+    using base_type::find_helper;
     using base_type::__is_inorder;
     using base_type::__is_size_correct;
     using base_type::upper_bound;
@@ -228,6 +233,9 @@ public:
     using base_type::intersection_of;
     using base_type::difference_of;
     using base_type::update_begin_node;
+    using base_type::union_of_helper;
+    using base_type::intersection_of_helper;
+    using base_type::difference_of_helper;
 
 public:
     /**
@@ -347,9 +355,13 @@ private:
      * 
      * @param new_node the newly inserted node
      */
+    template <bool Nullable>
     static void adjust_after_insertion(node_type* new_node, node_type* end) {
         for (node_type* curr = new_node, *par = new_node -> parent; par != end;
                 curr = par, par = par -> parent) {
+            if (par -> parent == curr) {
+                par -> height = par -> height;
+            }
             par -> height = std::max(par -> height, (unsigned char) (curr -> height + 1));
             char balance_factor = par -> compute_balance_factor();
             switch (balance_factor) {
@@ -360,19 +372,15 @@ private:
             // Rebalance will absorb height change
             // Fall through and return
             case 2:
-                par -> rebalance_left();
+                par -> template rebalance_left<Nullable>();
                 return;
             case -2:
-                par -> rebalance_right();
+                par -> template rebalance_right<Nullable>();
                 return;
             case 0:
                 return;
             }
         }
-    }
-
-    void adjust_after_insertion(node_type* new_node) {
-        adjust_after_insertion(new_node, sentinel);
     }
 
 public:
@@ -391,19 +399,34 @@ public:
     }
 
 private:
+    void insert_core(node_type* new_node, std::pair<node_type*, char> res) {
+        res.first -> link_child(new_node, res.second == IS_LEFT_CHILD);
+        // Populate ancestors' heights and rebalance
+        adjust_after_insertion<false>(new_node, sentinel);
+        update_begin_node(new_node);
+        ++element_count;
+    }
+
     template<typename... Args>
     std::pair<iterator, bool> insert_helper(const key_type& key, Args&&... args) {
         std::pair<node_type*, char> res = get_insertion_parent(key);
-        if (res.second & EXISTS) {
+        if (res.second == EXISTS) {
             return std::make_pair(iterator(res.first), false);
         }
         node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
-        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-        // Populate ancestors' heights and rebalance
-        adjust_after_insertion(new_node);
-        update_begin_node(new_node);
-        ++element_count;
+        insert_core(new_node, res);
         return std::make_pair(iterator(new_node), true);
+    }
+
+    template<typename... Args>
+    iterator insert_helper(const_iterator pos, const key_type& key, Args&&... args) {
+        std::pair<node_type*, char> res = get_insertion_parent(pos, key);
+        if (res.second == EXISTS) {
+            return iterator(res.first);
+        }
+        node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
+        insert_core(new_node, res);
+        return iterator(new_node);
     }
 
 public:
@@ -435,6 +458,32 @@ public:
         return insert_helper(key_of(value), std::move(value));
     }
 
+    /**
+     * @brief Insert a single value to this tree
+     * 
+     * @param pos   an iterator that is close to the insertion location of the new value. If the iterator
+     *              is far from insertion location, the value is inserted as if insert(value)
+     * @param value the value to be copied and inserted
+     * 
+     * @return an iterator to the inserted element, or to the element that prevented the insertion
+     */
+    iterator insert(const_iterator pos, const value_type& value) requires std::is_copy_constructible_v<value_type> {
+        return insert_helper(pos, key_of(value), value);
+    }
+
+    /**
+     * @brief Insert a single value to this tree
+     * 
+     * @param pos   an iterator that is close to the insertion location of the new value. If the iterator
+     *              is far from insertion location, the value is inserted as if insert(std::move(value))
+     * @param value the value to be moved and inserted
+     * 
+     * @return an iterator to the inserted element, or to the element that prevented the insertion
+     */
+    iterator insert(const_iterator pos, value_type&& value) requires std::move_constructible<value_type> {
+        return insert_helper(pos, key_of(value), std::move(value));
+    }
+
 public:
     /**
      * @brief In-place construct and insert a value to this tree
@@ -453,16 +502,11 @@ public:
     std::pair<iterator, bool> emplace(Args&&... args) {
         node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
         std::pair<node_type*, char> res = get_insertion_parent(key_of(new_node -> value));
-        if (res.second & EXISTS) {
+        if (res.second == EXISTS) {
             new_node -> destroy(node_allocator);
             return std::make_pair(iterator(res.first), false);
         }
-        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-
-        // Populate ancestors' heights and rebalance
-        adjust_after_insertion(new_node);
-        update_begin_node(new_node);
-        ++element_count;
+        insert_core(new_node, res);
         return std::make_pair(iterator(new_node), true);
     }
 
@@ -481,16 +525,11 @@ public:
     iterator emplace_hint(const_iterator hint, Args&&... args) {
         node_type* new_node = node_type::construct(node_allocator, std::forward<Args>(args)...);
         std::pair<node_type*, char> res = get_insertion_parent(hint, key_of(new_node -> value));
-        if (res.second & EXISTS) {
+        if (res.second == EXISTS) {
             new_node -> destroy(node_allocator);
             return iterator(res.first);
         }
-        res.first -> link_child(new_node, res.second & IS_LEFT_CHILD);
-
-        // Populate ancestors' heights and rebalance
-        adjust_after_insertion(new_node);
-        update_begin_node(new_node);
-        ++element_count;
+        insert_core(new_node, res);
         return iterator(new_node);
     }
 
@@ -500,7 +539,7 @@ public:
      * A value is constructed only if it doesn't exist in the tree
      * 
      * @tparam Args the type of arguments to construct the value
-     * @param key the key associated with the new value to insert
+     * @param key  the key associated with the new value to insert
      * @param args the arguments to construct the value
      * @return a pair of an iterator and a boolean
      * 
@@ -513,15 +552,38 @@ public:
         return insert_helper(key, std::forward<Args>(args)...);
     }
 
+    /**
+     * @brief In-place construct and insert a value to this tree given its key and construction arguments
+     * 
+     * A value is constructed only if it doesn't exist in the tree
+     * 
+     * @tparam Args the type of arguments to construct the value
+     * @param pos   an iterator that is close to the insertion location of the new value. If the iterator
+     *              is far from insertion location, the value is inserted as if insert(std::move(value))
+     * @param key   the key associated with the new value to insert
+     * @param args  the arguments to construct the value
+     * @return a pair of an iterator and a boolean
+     * 
+     * The iterator points at the emplaced value, or the existing one if this value already exists
+     * 
+     * The boolean is true if emplace succeeded, namely the value is not a duplicate, false otherwise
+     */
+    template<typename... Args>
+    iterator try_emplace(const_iterator pos, const key_type& key, Args&&... args) {
+        return insert_helper(pos, key, std::forward<Args>(args)...);
+    }
+
 private:
     /**
      * @brief Remove the node pointed by an iterator
      * 
-     * The node is not deallocated
+     * The node is not deallocated.
      * 
-     * @param pos the iterator to the node to remove
+     * @param pos the iterator to the node to remove. It must have a nonnull parent.
+     * @param end the parent of the root of the tree, could be null
      * @return iterator following the removed node
      */
+    template <bool Nullable>
     static iterator extract(iterator pos, node_type* end) {
         // Prepare return result
         iterator res = std::next(pos);
@@ -532,7 +594,7 @@ private:
         // The lowest node that needs rebalance
         node_type* rebalance_start = target_parent;
         // Which child the node lost
-        bool is_lost_left_child = target_parent -> left_child.get() == target_node;
+        bool is_lost_left_child = target_parent -> left_child == target_node;
         if (target_node -> is_leaf()) {
             /*
              *     P
@@ -548,7 +610,7 @@ private:
              *      \
              *       A
              */
-            target_parent -> link_child(std::move(target_node -> right_child), is_lost_left_child);
+            target_parent -> link_child(move(target_node -> right_child), is_lost_left_child);
         } else if (!target_node -> right_child) {
             /*
              *      P          P
@@ -557,7 +619,7 @@ private:
              *     /
              *    A
              */
-            target_parent -> link_child(std::move(target_node -> left_child), is_lost_left_child);
+            target_parent -> link_child(move(target_node -> left_child), is_lost_left_child);
         } else if (!target_node -> right_child -> left_child) {
             /*
              *        P               P
@@ -568,9 +630,9 @@ private:
              *     / \   \         / \
              *    .   .  [C]      .   .
              */
-            avl_node<V>* replacing_node = target_node -> right_child.get();
-            target_parent -> link_child(std::move(target_node -> right_child), is_lost_left_child);
-            replacing_node -> link_left_child(std::move(target_node -> left_child));
+            avl_node<V>* replacing_node = target_node -> right_child;
+            target_parent -> link_child(move(target_node -> right_child), is_lost_left_child);
+            replacing_node -> link_left_child(move(target_node -> left_child));
             // Let B take target's position
             replacing_node -> height = target_node -> height;
             rebalance_start = replacing_node;
@@ -599,7 +661,7 @@ private:
             // (1) Let its right child take its place if it exists
             // This will make the parent forfeit the ownership to the replacing node
             if (replacing_node -> right_child) {
-                replacing_node -> parent -> link_left_child(std::move(replacing_node -> right_child));
+                replacing_node -> parent -> link_left_child(move(replacing_node -> right_child));
             } else {
                 // Otherwise make its parent disown itself
                 replacing_node -> orphan_self();
@@ -607,8 +669,8 @@ private:
 
             // Place the replacing node where the target node was
             target_parent -> link_child(replacing_node, is_lost_left_child); // (2)
-            replacing_node -> link_left_child(std::move(target_node -> left_child)); // (3)
-            replacing_node -> link_right_child(std::move(target_node -> right_child)); // (4)
+            replacing_node -> link_left_child(move(target_node -> left_child)); // (3)
+            replacing_node -> link_right_child(move(target_node -> right_child)); // (4)
             replacing_node -> height = target_node -> height;
         }
 
@@ -620,10 +682,10 @@ private:
             case 1:
                 goto loop_end;
             case -2:
-                curr = curr -> rebalance_right();
+                curr = curr -> template rebalance_right<Nullable>();
                 break;
             case 2:
-                curr = curr -> rebalance_left();
+                curr = curr -> template rebalance_left<Nullable>();
                 break;
             // Do nothing. Height change needs to percolate up more
             case 0:
@@ -631,6 +693,9 @@ private:
             }
         }
         loop_end:
+        // Clean up target_node so caller has a clean node to use
+        // Mandatory for join methods
+        target_node -> parent = nullptr;
         return res;
     }
 
@@ -642,11 +707,11 @@ public:
      * @return true if removal happened (i.e. the key was found), false otherwise
      */
     bool erase(const key_type& key) {
-        iterator it = this -> find(key);
-        if (it == this -> end()) {
+        node_type* node = find_helper(key);
+        if (node == sentinel) {
             return false;
         }
-        erase(it);
+        erase(iterator(node));
         return true;
     }
 
@@ -658,7 +723,7 @@ public:
      */
     iterator erase(iterator pos) {
         bool was_begin_node = pos.node == begin_node;
-        iterator res = extract(pos, sentinel);
+        iterator res = extract<false>(pos, sentinel);
         if (was_begin_node) {
             begin_node = res.node;
         }
@@ -756,12 +821,12 @@ private:
      * All elements in the destination must be less than all elements
      * in the source
      * 
-     * @param dest a unique ptr to the tree to join into. Must be nonnull
-     * @param src a unique ptr to the tree that will join the destination tree.
+     * @param dest the tree to join into. Must be nonnull
+     * @param src the tree that will join the destination tree.
      *            Can be null
      * @return the result of the join
      */
-    static unique_ptr_type join_right(unique_ptr_type dest, unique_ptr_type src) {
+    static node_type* join_right(node_type* dest, node_type* src) {
         if (!src) {
             return dest;
         }
@@ -769,17 +834,15 @@ private:
             // Note that both dest and src are valid avl tree root
             // src -> height <= dest -> height <= 2
             // So the linking here will preserve the avl constraint
-            dest -> link_right_child(std::move(src));
+            dest -> link_right_child(src);
             dest -> update_height();
             return dest;
         }
         node_type* middle_node = dest -> get_rightmost_descendant();
-        // dest may no longer be the root after rebalancing in extract
-        // Releasing it to avoid having two unique pointers owning the same raw pointer
-        node_type* raw_dest = dest.release();
-        extract(middle_node, nullptr);
-        node_type* new_dest = raw_dest -> parent ? raw_dest -> parent : raw_dest;
-        return join_right(unique_ptr_type(new_dest), std::move(src), unique_ptr_type(middle_node));
+        // dest may no longer be the root after rebalancing in extract()
+        extract<true>(middle_node, nullptr);
+        node_type* new_dest = dest -> parent ? dest -> parent : dest;
+        return join_right(new_dest, src, middle_node);
     }
 
     /**
@@ -788,32 +851,28 @@ private:
      * All elements in the destination must be less than the middle node
      * All elements in the source must be greater than the middle node
      * 
-     * @param dest a unique ptr to the tree to join into. Must be nonnull
-     * @param src a unique ptr to the tree that will join the destination tree.
-     *            Can be null
-     * @param middle_node a unique ptr to the middle node. Must be nonnull
+     * @param dest the tree to join into. Must be nonnull
+     * @param src  the tree that will join the destination tree. Can be null
+     * @param middle_node the middle node. Must be nonnull
      * @return the result of the join
      */
-    static unique_ptr_type join_right(unique_ptr_type dest, unique_ptr_type src, unique_ptr_type middle_node) {
+    static node_type* join_right(node_type* dest, node_type* src, node_type* middle_node) {
         unsigned char max_balancing_height = src ? src -> height + 1 : 1;
-        node_type* curr = dest.get();
+        node_type* curr = dest;
         node_type* parent = nullptr;
         while (curr && curr -> height > max_balancing_height) {
             parent = curr;
-            curr = curr -> right_child.get();
+            curr = curr -> right_child;
         }
-
-        node_type* middle_ptr = middle_node.release();
-        node_type* raw_dest = dest.release();
         if (parent) {
-            parent -> link_right_child(middle_ptr);
+            parent -> link_right_child(middle_node);
         }
         
-        middle_ptr -> safe_link_left_child(curr);
-        middle_ptr -> safe_link_right_child(std::move(src));
-        middle_ptr -> update_height();
-        adjust_after_insertion(middle_ptr, nullptr);
-        return unique_ptr_type(raw_dest -> parent ? raw_dest -> parent : raw_dest);
+        middle_node -> nullable_link_left_child(curr);
+        middle_node -> nullable_link_right_child(src);
+        middle_node -> update_height();
+        adjust_after_insertion<true>(middle_node, nullptr);
+        return dest -> parent ? dest -> parent : dest;
     }
 
     /**
@@ -822,12 +881,11 @@ private:
      * All elements in the destination must be greater than all elements
      * in the source
      * 
-     * @param dest a unique ptr to the tree to join into. Must be nonnull
-     * @param src a unique ptr to the tree that will join the destination tree.
-     *            Can be null
+     * @param dest the tree to join into. Must be nonnull
+     * @param src  the tree that will join the destination tree. Can be null
      * @return the result of the join
      */
-    static unique_ptr_type join_left(unique_ptr_type dest, unique_ptr_type src) {
+    static node_type* join_left(node_type* dest, node_type* src) {
         if (!src) {
             return dest;
         }
@@ -835,17 +893,15 @@ private:
             // Note that both dest and src are valid avl tree root
             // src -> height <= dest -> height <= 2
             // So the linking here will preserve the avl constraint
-            dest -> link_left_child(std::move(src));
+            dest -> link_left_child(src);
             dest -> update_height();
             return dest;
         }
         node_type* middle_node = dest -> get_leftmost_descendant();
         // dest may no longer be the root after rebalancing in extract
-        // Releasing it to avoid having two unique pointers pointint owning the same raw pointer
-        node_type* raw_dest = dest.release();
-        extract(middle_node, nullptr);
-        node_type* new_dest = raw_dest -> parent ? raw_dest -> parent : raw_dest;
-        return join_left(unique_ptr_type(new_dest), std::move(src), unique_ptr_type(middle_node));
+        extract<true>(middle_node, nullptr);
+        node_type* new_dest = dest -> parent ? dest -> parent : dest;
+        return join_left(new_dest, src, middle_node);
     }
 
     /**
@@ -854,32 +910,28 @@ private:
      * All elements in the destination must be greater than the middle node
      * All elements in the source must be less than the middle node
      * 
-     * @param dest a unique ptr to the tree to join into. Must be nonnull
-     * @param src a unique ptr to the tree that will join the destination tree.
-     *            Can be null
-     * @param middle_node a unique ptr to the middle node. Must be nonnull
+     * @param dest the tree to join into. Must be nonnull
+     * @param src  the tree that will join the destination tree. Can be null
+     * @param middle_node the middle node. Must be nonnull
      * @return the result of the join
      */
-    static unique_ptr_type join_left(unique_ptr_type dest, unique_ptr_type src, unique_ptr_type middle_node) {
+    static node_type* join_left(node_type* dest, node_type* src, node_type* middle_node) {
         unsigned char max_balancing_height = src ? src -> height + 1 : 1;
-        node_type* curr = dest.get();
+        node_type* curr = dest;
         node_type* parent = nullptr;
         while (curr && curr -> height > max_balancing_height) {
             parent = curr;
-            curr = curr -> left_child.get();
+            curr = curr -> left_child;
         }
-
-        node_type* middle_ptr = middle_node.release();
-        node_type* raw_dest = dest.release();
         if (parent) {
-            parent -> link_left_child(middle_ptr);
+            parent -> link_left_child(middle_node);
         }
-        middle_ptr -> safe_link_left_child(std::move(src));
-        middle_ptr -> safe_link_right_child(curr);
-        middle_ptr -> update_height();
+        middle_node -> nullable_link_left_child(src);
+        middle_node -> nullable_link_right_child(curr);
+        middle_node -> update_height();
         
-        adjust_after_insertion(middle_ptr, nullptr);
-        return unique_ptr_type(raw_dest -> parent ? raw_dest -> parent : raw_dest);
+        adjust_after_insertion<true>(middle_node, nullptr);
+        return dest -> parent ? dest -> parent : dest;
     }
 
 public:
@@ -893,26 +945,26 @@ public:
      * @param middle a leafy node without parent that has a value between the left and right true
      * @return node_type* the joined node
      */
-    static unique_ptr_type join(unique_ptr_type left, unique_ptr_type middle, unique_ptr_type right) {
+    static node_type* join(node_type* left, node_type* middle, node_type* right) {
         if (!left && !right) {
             middle -> height = 1;
             return middle;
         }
 
         if (left && (!right || left -> height >= right -> height)) {
-            return join_right(std::move(left), std::move(right), std::move(middle));
+            return join_right(left, right, middle);
         }
-        return join_left(std::move(right), std::move(left), std::move(middle));
+        return join_left(right, left, middle);
     }
 
-    static unique_ptr_type join(unique_ptr_type left, unique_ptr_type right) {
+    static node_type* join(node_type* left, node_type* right) {
         if (!left && !right) {
             return nullptr;
         }
         if (left && (!right || left -> height >= right -> height)) {
-            return join_right(std::move(left), std::move(right));
+            return join_right(left, right);
         }
-        return join_left(std::move(right), std::move(left));
+        return join_left(right, left);
     }
 
 private:
@@ -920,38 +972,38 @@ private:
      * @brief A helper for splitting a tree by a key of a given node
      */
     template<typename Resolver>
-    std::pair<unique_ptr_type, bool> split_helper(unique_ptr_type root, unique_ptr_type divider, const key_type& divider_key, Resolver& resolver) {
+    std::pair<node_type*, bool> split_helper(node_type* root, node_type* divider, const key_type& divider_key, Resolver& resolver) {
         if (!root) {
-            return std::make_pair(std::move(divider), false);
+            return std::make_pair(divider, false);
         }
         const key_type& root_key = key_of(root -> value);
         int key_comp_res = this -> key_comp_wrapper(divider_key, root_key);
         if (key_comp_res == 0) {
-            if (resolver(root -> value, divider -> value)) {
-                if (root -> left_child) {
-                    root -> left_child -> parent = nullptr;
-                }
-                if (root -> right_child) {
-                    root -> right_child -> parent = nullptr;
-                }
-                divider.release() -> destroy(node_allocator);
-                return std::make_pair(std::move(root), true);
+            if (root -> left_child) {
+                root -> left_child -> parent = nullptr;
             }
-            divider -> left_child.reset(root -> orphan_left_child());
-            divider -> right_child.reset(root -> orphan_right_child());
-            root.release() -> destroy(node_allocator);
-            return std::make_pair(std::move(divider), true);
+            if (root -> right_child) {
+                root -> right_child -> parent = nullptr;
+            }
+            if (resolver(root -> value, divider -> value)) {
+                divider -> destroy(node_allocator);
+                return std::make_pair(root, true);
+            }
+            divider -> left_child = root -> left_child;
+            divider -> right_child = root -> right_child;
+            root -> destroy(node_allocator);
+            return std::make_pair(divider, true);
         }
         root -> height = 1;
-        unique_ptr_type root_left_child(root -> orphan_left_child());
-        unique_ptr_type root_right_child(root -> orphan_right_child());
-        std::pair<unique_ptr_type, bool> split_result;
+        node_type* root_left_child = root -> orphan_left_child();
+        node_type* root_right_child = root -> orphan_right_child();
+        std::pair<node_type*, bool> split_result;
         if (key_comp_res < 0) {
-            split_result = split_helper(std::move(root_left_child), std::move(divider), divider_key, resolver);
-            split_result.first -> right_child = join(std::move(split_result.first -> right_child), std::move(root), std::move(root_right_child));
+            split_result = split_helper(root_left_child, divider, divider_key, resolver);
+            split_result.first -> right_child = join(move(split_result.first -> right_child), root, root_right_child);
         } else {
-            split_result = split_helper(std::move(root_right_child), std::move(divider), divider_key, resolver);
-            split_result.first -> left_child = join(std::move(root_left_child), std::move(root), std::move(split_result.first -> left_child));
+            split_result = split_helper(root_right_child, divider, divider_key, resolver);
+            split_result.first -> left_child = join(root_left_child, root, move(split_result.first -> left_child));
         }
         return split_result;
     }
@@ -972,36 +1024,10 @@ public:
      *         without having to resort to tuple, which is slow. The boolean is true if a collision occurs. False otherwise.
      */
     template<typename Resolver=chooser<value_type> >
-    std::pair<unique_ptr_type, bool> split(unique_ptr_type root, unique_ptr_type divider, Resolver resolver = Resolver()) 
+    std::pair<node_type*, bool> split(node_type* root, node_type* divider, Resolver resolver = Resolver()) 
         requires is_resolver<value_type, Resolver> {
-        return split_helper(std::move(root), std::move(divider), key_of(divider -> value), resolver);
-    }
-
-    template<typename Resolver=chooser<value_type> >
-    friend avl_tree union_of_helper(avl_tree tree1, avl_tree tree2,
-        std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) 
-        requires is_resolver<value_type, Resolver> {
-        if (tree1.empty()) {
-            return tree2;
-        }
-        if (tree2.empty()) {
-            return tree1;
-        }
-        
-        node_type* root1 = tree1.sentinel -> orphan_left_child();
-        tree1.element_count = 0;
-        node_type* root2 = tree2.sentinel -> orphan_left_child();
-        tree2.element_count = 0;
-        unique_ptr_type res;
-        if (executor.has_value()) {
-            res = tree1.union_of(unique_ptr_type(root1), unique_ptr_type(root2), executor.value().get(), resolver);
-        } else {
-            res = tree1.union_of(unique_ptr_type(root1), unique_ptr_type(root2), resolver);
-        }
-        tree1.sentinel -> link_left_child(std::move(res));
-        tree1.begin_node = tree1.sentinel -> get_leftmost_descendant();
-        tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
-        return tree1;
+        const key_type& key = key_of(divider -> value);
+        return split_helper(root, divider, key, resolver);
     }
 
     /**
@@ -1028,34 +1054,6 @@ public:
             std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)), resolver);
     }
 
-    template<typename Resolver=chooser<value_type> >
-    friend avl_tree intersection_of_helper(avl_tree tree1, avl_tree tree2,
-        std::optional<std::reference_wrapper<thread_pool_executor>> executor, Resolver resolver) 
-        requires is_resolver<value_type, Resolver> {
-        if (tree1.empty()) {
-            return tree1;
-        }
-        if (tree2.empty()) {
-            return tree2;
-        }
-        
-        node_type* root1 = tree1.sentinel -> orphan_left_child();
-        tree1.element_count = 0;
-        node_type* root2 = tree2.sentinel -> orphan_left_child();
-        tree2.element_count = 0;
-        unique_ptr_type res;
-
-        if (executor.has_value()) {
-            res = tree1.intersection_of(unique_ptr_type(root1), unique_ptr_type(root2), executor.value().get(), resolver);
-        } else {
-            res = tree1.intersection_of(unique_ptr_type(root1), unique_ptr_type(root2), resolver);
-        }
-        tree1.sentinel -> safe_link_left_child(std::move(res));
-        tree1.begin_node = tree1.sentinel -> get_leftmost_descendant();
-        tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
-        return tree1;
-    }
-
     /**
      * @brief Compute the intersection of two avl trees
      * 
@@ -1078,29 +1076,6 @@ public:
         Resolver resolver=Resolver()) requires is_resolver<value_type, Resolver> {
         return intersection_of_helper(std::move(tree1), std::move(tree2),
             std::optional<std::reference_wrapper<thread_pool_executor>> (std::ref(executor)), resolver);
-    }
-
-    friend avl_tree difference_of_helper(avl_tree tree1, avl_tree tree2,
-        std::optional<std::reference_wrapper<thread_pool_executor>> executor) {
-        if (tree1.empty() || tree2.empty()) {
-            return tree1;
-        }
-        
-        node_type* root1 = tree1.sentinel -> orphan_left_child();
-        tree1.element_count = 0;
-        node_type* root2 = tree2.sentinel -> orphan_left_child();
-        tree2.element_count = 0;
-        unique_ptr_type res;
-
-        if (executor.has_value()) {
-            res = tree1.difference_of(unique_ptr_type(root1), unique_ptr_type(root2), executor.value().get());
-        } else {
-            res = tree1.difference_of(unique_ptr_type(root1), unique_ptr_type(root2));
-        }
-        tree1.sentinel -> safe_link_left_child(std::move(res));
-        tree1.begin_node = tree1.sentinel -> get_leftmost_descendant();
-        tree1.element_count = std::distance(tree1.cbegin(), tree1.cend());
-        return tree1;
     }
 
     /**
@@ -1127,11 +1102,11 @@ private:
         if (!node) {
             return 0;
         }
-        unsigned actual_left_height = __is_height_correct_helper(node -> left_child.get());
+        unsigned actual_left_height = __is_height_correct_helper(node -> left_child);
         if (actual_left_height == ERROR) {
             return ERROR;
         }
-        unsigned actual_right_height = __is_height_correct_helper(node -> right_child.get());
+        unsigned actual_right_height = __is_height_correct_helper(node -> right_child);
         if (actual_right_height == ERROR) {
             return ERROR;
         }
@@ -1154,11 +1129,22 @@ private:
 public:
     bool __is_valid() const noexcept {
         node_type* smallest = sentinel -> get_leftmost_descendant();
-        return __is_height_correct(sentinel -> left_child.get()) 
-            & sentinel -> __is_parent_child_link_mutual() 
-            & __is_inorder(const_iterator(smallest), this -> cend()) 
-            & __is_size_correct(sentinel -> left_child.get(), element_count)
-            & this -> __is_begin_node_correct();
+        if (!__is_height_correct(sentinel -> left_child)) {
+            return false;
+        }
+        if (!sentinel -> __is_parent_child_link_mutual()) {
+            return false;
+        }
+        if (!__is_size_correct(sentinel -> left_child, element_count)) {
+            return false;
+        }
+        if (!this -> __is_begin_node_correct()) {
+            return false;
+        }
+        if (!__is_inorder(const_iterator(smallest), this -> cend())) {
+            return false;
+        }
+        return true;
     }
 };
 }

@@ -4,7 +4,7 @@
 #include <mutex>
 #include <condition_variable>
 #include "task.h"
-#include "src/vector.h"
+#include "src/vector/vector.h"
 
 namespace algo {
 class thread_pool_executor {

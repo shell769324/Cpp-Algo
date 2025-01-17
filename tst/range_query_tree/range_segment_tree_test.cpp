@@ -1,7 +1,7 @@
 #include <algorithm>
 #include "gtest/gtest.h"
-#include "range_query_tree/range_segment_tree.h"
-#include "src/vector.h"
+#include "src/range_query_tree/range_segment_tree.h"
+#include "src/vector/vector.h"
 #include "tst/utility/constructor_stub.h"
 #include <numeric>
 #include "tst/utility/common.h"

@@ -119,6 +119,14 @@ struct segment_tree_decidier<segment_tree<Args...>> {
     using type = std::true_type;
 };
 
+template <typename Tree>
+struct segment_tree_traits {
+    using alloc_traits = std::allocator_traits<typename Tree::allocator_type>;
+    using subtree_type = std::tuple<typename Tree::pointer, std::size_t, std::size_t>;
+    using subtree_allocator_type = typename alloc_traits::template rebind_alloc<subtree_type>;
+    using subtree_unique_ptr = std::unique_ptr<subtree_type[], deleter<subtree_type, subtree_allocator_type> >;
+};
+
 /**
  * @brief Compute the result of applying op over the range of [first, last)
  * 
@@ -140,7 +148,7 @@ T query_helper(const Tree& tree, std::size_t first, std::size_t last, const T* c
     if constexpr (std::is_void_v<typename segment_tree_decidier<Tree>::type>) {
         (const_cast<Tree&>(tree)).push((const_cast<T*>(curr)), left, right);
     }
-    std::size_t mid = (right - left) / 2 + left;
+    std::size_t mid = ((right - left) >> 1) + left;
     // The left half contains the query range wholly
     if (last <= mid) {
         return query_helper(tree, first, last, curr + 1, left, mid);
@@ -157,7 +165,7 @@ T query_helper(const Tree& tree, std::size_t first, std::size_t last, const T* c
 template <typename T>
 std::size_t count_subtrees(T* curr, std::size_t left, std::size_t right, std::size_t first, std::size_t last) noexcept {
     T* left_root = curr + 1;
-    std::size_t mid = (right - left) / 2 + left;
+    std::size_t mid = ((right - left) >> 1) + left;
     T* right_root = curr + 2 * (mid - left);
     if (left == first && right == last) {
         return 1;
@@ -188,7 +196,7 @@ template <typename Tree, typename T>
 void collect_subtrees_helper(Tree& tree, std::tuple<T*, std::size_t, std::size_t>*& fill_pos, T* curr, std::size_t left, std::size_t right, 
                              std::size_t first, std::size_t last) noexcept {
     T* left_root = curr + 1;
-    std::size_t mid = (right - left) / 2 + left;
+    std::size_t mid = ((right - left) >> 1) + left;
     T* right_root = curr + 2 * (mid - left);
     if (left == first && right == last) {
         std::construct_at(fill_pos, curr, left, right);
@@ -223,16 +231,17 @@ void collect_subtrees_helper(Tree& tree, std::tuple<T*, std::size_t, std::size_t
  *         the given query range
  */
 template <typename Tree>
-Tree::subtree_unique_ptr collect_subtrees(Tree& tree, std::size_t first, std::size_t last) {
+segment_tree_traits<Tree>::subtree_unique_ptr collect_subtrees(Tree& tree, std::size_t first, std::size_t last) {
     // Two passes can allow use to allocate a fixed memory. The performance loss
     // is justified
     std::size_t subtree_count = count_subtrees(tree.data, 0, tree.length, first, last);
-    using subtree_type = Tree::subtree_type;
-    subtree_type* subtrees = Tree::alloc_traits::template rebind_traits<subtree_type>::allocate(tree.subtree_allocator, subtree_count);
+    using traits = segment_tree_traits<Tree>;
+    using subtree_type = typename traits::subtree_type;
+    subtree_type* subtrees = traits::alloc_traits::template rebind_traits<subtree_type>::allocate(tree.subtree_allocator, subtree_count);
     // subtrees will be incremented, so we need to save a pointer to the start here
     subtree_type* result = subtrees;
     collect_subtrees_helper(tree, subtrees, tree.data, 0, tree.length, first, last);
-    return typename Tree::subtree_unique_ptr(result, deleter<subtree_type, typename Tree::subtree_allocator_type>(subtree_count, tree.subtree_allocator));
+    return typename traits::subtree_unique_ptr(result, deleter<subtree_type, typename traits::subtree_allocator_type>(subtree_count, tree.subtree_allocator));
 }
 
 
@@ -285,7 +294,7 @@ std::optional<std::size_t> prefix_search(Tree& tree, F& decider, std::size_t fir
     if (first == last) {
         std::optional<std::size_t>();
     }
-    typename Tree::subtree_unique_ptr subtrees = collect_subtrees(tree, first, last);
+    typename segment_tree_traits<Tree>::subtree_unique_ptr subtrees = collect_subtrees(tree, first, last);
     std::size_t subtree_count = subtrees.get_deleter().size();
     using T = typename Tree::value_type;
     std::optional<T> acc;
@@ -348,7 +357,7 @@ std::optional<std::size_t> suffix_search(Tree& tree, F& decider, std::size_t fir
     if (first == last) {
         std::optional<std::size_t>();
     }
-    typename Tree::subtree_unique_ptr subtrees = collect_subtrees(tree, first, last);
+    typename segment_tree_traits<Tree>::subtree_unique_ptr subtrees = collect_subtrees(tree, first, last);
     std::size_t subtree_count = subtrees.get_deleter().size();
     using T = typename Tree::value_type;
     std::optional<T> acc;

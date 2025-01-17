@@ -40,10 +40,10 @@ private:
     using alloc_traits = std::allocator_traits<Allocator>;
     using cleaner_type = std::unique_ptr<T, deleter<T, allocator_type> >;
     using subtree_type = std::tuple<T*, std::size_t, std::size_t>;
-    using subtree_allocator_type = typename alloc_traits::rebind_alloc<subtree_type>;
+    using subtree_allocator_type = typename alloc_traits::template rebind_alloc<subtree_type>;
     using subtree_unique_ptr = std::unique_ptr<subtree_type[], deleter<subtree_type, subtree_allocator_type> >;
-    using bool_allocator_type = typename alloc_traits::rebind_alloc<bool>;
-    using bool_alloc_traits = typename alloc_traits::rebind_traits<bool>;
+    using bool_allocator_type = typename alloc_traits::template rebind_alloc<bool>;
+    using bool_alloc_traits = typename alloc_traits::template rebind_traits<bool>;
     using initializer_type = segment_tree_initializer<T, Operator, Allocator>;
 
     std::size_t length;
@@ -503,7 +503,7 @@ public:
 
     friend void collect_subtrees_helper<range_segment_tree, T>(
         range_segment_tree& tree, std::tuple<T*, std::size_t, std::size_t>*& fill_pos, 
-        T* curr, std::size_t left, std::size_t right, std::size_t first, std::size_t last);
+        T* curr, std::size_t left, std::size_t right, std::size_t first, std::size_t last) noexcept;
 
     template<typename F, typename U, typename Tree>
     friend std::size_t prefix_search_helper(Tree& tree, U* curr, std::size_t left, std::size_t right, std::optional<U> acc, F& decider);

@@ -2,7 +2,7 @@
 
 namespace algo {
 class construction_destruction_tracker {
-private:
+public:
     std::size_t constructor_mark;
     std::size_t constructed_mark;
     std::size_t destructor_mark;
@@ -10,7 +10,6 @@ private:
     std::size_t pair_constructed_mark;
     std::size_t pair_destroyed_mark;
 
-public:
     void reset();
     void check();
     void mark();

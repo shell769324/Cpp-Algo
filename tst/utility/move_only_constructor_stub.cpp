@@ -1,4 +1,3 @@
-#include <iostream>
 #include <vector>
 #include <utility>
 #include "move_only_constructor_stub.h"

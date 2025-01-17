@@ -4,6 +4,7 @@
 #include "src/deque/deque_constants.h"
 #include "src/deque/deque_iterator.h"
 #include "src/common.h"
+#include <algorithm>
 
 namespace algo {
 
@@ -26,11 +27,10 @@ public:
 
 private:
     using alloc_traits = std::allocator_traits<allocator_type>;
-    using pointer_allocator_type = typename alloc_traits::rebind_alloc<T*>;
-    using pointer_alloc_traits = typename alloc_traits::rebind_traits<T*>;
+    using pointer_allocator_type = typename alloc_traits::template rebind_alloc<T*>;
+    using pointer_alloc_traits = typename alloc_traits::template rebind_traits<T*>;
 
     size_type num_chunks;
-    size_type num_elements;
     // Allocated chunks
     T** begin_chunk;
     T** end_chunk;
@@ -49,9 +49,20 @@ private:
 
 public:
     bool __is_valid() {
-        size_type actual_num_elements = end_iterator - begin_iterator;
-        if (actual_num_elements != num_elements || data > begin_chunk || begin_chunk > end_chunk 
+        if (data > begin_chunk || begin_chunk > end_chunk 
             || end_chunk > data + num_chunks) {
+            return false;
+        }
+        if (*end_iterator.outer_pointer == nullptr 
+            ||  (*end_iterator.outer_pointer - end_iterator.inner_pointer >= CHUNK_SIZE<T>)) {
+            return false;
+        }
+        if (begin_iterator.chunk_begin != *begin_iterator.outer_pointer 
+            || begin_iterator.chunk_end != *begin_iterator.outer_pointer + CHUNK_SIZE<T>) {
+            return false;
+        }
+        if (end_iterator.chunk_begin != *end_iterator.outer_pointer 
+            || end_iterator.chunk_end != *end_iterator.outer_pointer + CHUNK_SIZE<T>) {
             return false;
         }
         for (T** p = data - 1; p < begin_chunk; ++p) {
@@ -74,24 +85,28 @@ public:
 
 private:
     void fill_helper(size_type n, auto filler) {
-        // Allow some room on both ends
-        num_chunks = DEFAULT_NUM_CHUNKS + (n + CHUNK_SIZE<T> - 1) / CHUNK_SIZE<T>;
-        num_elements = n;
+        // CHUNK_PADDING to allow an extra chunk to be allocated on both ends without map
+        // reallocation after the object is constructed
+        // Additionally, we need to make sure position at end_iterator can be directly constructed
+        num_chunks = CHUNK_PADDING + (n + CHUNK_SIZE<T>) / CHUNK_SIZE<T>;
 
         // We need to free both the outer memory and the inner memory in case of exception
         T** sentinel = pointer_alloc_traits::allocate(pointer_allocator, num_chunks + 2);
         std::unique_ptr<T*[], deleter<T*, pointer_allocator_type> > cleaner(
             sentinel, deleter<T*, pointer_allocator_type>(num_chunks + 2, pointer_allocator));
         data = sentinel + 1;
-        begin_chunk = data + DEFAULT_NUM_CHUNKS / 2,
+        begin_chunk = data + CHUNK_PADDING / 2,
         end_chunk = begin_chunk;
         std::fill(sentinel, sentinel + num_chunks + 2, nullptr);
         try {
-            for (size_type remain = n; remain > 0; ++end_chunk) {
+            // n + 1 since we want the end_iterator to point to a valid chunk
+            // This helps to optimize push_back
+            for (size_type remain = n + 1; remain > 0; ++end_chunk) {
                 *end_chunk = alloc_traits::allocate(this -> allocator, CHUNK_SIZE<T>);
-                filler(*end_chunk, std::min<size_type>(remain, CHUNK_SIZE<T>));
-                size_type cap = std::min<size_type>(CHUNK_SIZE<T>, remain);
-                remain -= cap;
+                // remain - 1 since one is left for end_iterator. We don't actually construct it
+                size_type cap = std::min<size_type>(CHUNK_SIZE<T>, remain - 1);
+                filler(*end_chunk, cap);
+                remain -= std::min<size_type>(CHUNK_SIZE<T>, remain);
             }
         } catch (...) {
             for (T** p = begin_chunk; p != end_chunk; ++p) {
@@ -118,17 +133,10 @@ public:
      * @param allocator the allocator to allocate and deallocate raw memory
      */
     explicit deque(const allocator_type& allocator) 
-        : num_chunks(DEFAULT_NUM_CHUNKS),
-          num_elements(0),
-          allocator(allocator),
+        : allocator(allocator),
           pointer_allocator(allocator) {
-        T** sentinel = pointer_alloc_traits::allocate(pointer_allocator, num_chunks + 2);
-        data = sentinel + 1;
-        std::fill(sentinel, sentinel + num_chunks + 2, nullptr);
-        begin_chunk = data + num_chunks / 2;
-        end_chunk = begin_chunk;
-        begin_iterator = iterator(begin_chunk, *begin_chunk);
-        end_iterator = begin_iterator;
+        auto nop = [](T*, size_type) {};
+        fill_helper(0, nop);
     }
 
     /**
@@ -215,7 +223,6 @@ public:
      */
     deque(const deque& other) requires std::is_copy_constructible_v<T> 
         : num_chunks(other.num_chunks),
-          num_elements(other.num_elements),
           allocator(other.allocator),
           pointer_allocator(other.pointer_allocator) {
         copy_constructor_helper(other);
@@ -229,7 +236,6 @@ public:
      */
     deque(const deque& other, const std::type_identity_t<Allocator>& allocator) requires std::is_copy_constructible_v<T> 
         : num_chunks(other.num_chunks),
-          num_elements(other.num_elements),
           allocator(allocator),
           pointer_allocator(allocator) {
         copy_constructor_helper(other);
@@ -244,7 +250,6 @@ public:
      */
     deque(deque&& other) noexcept 
         : num_chunks(0),
-          num_elements(0),
           begin_chunk(nullptr),
           end_chunk(nullptr),
           data(nullptr) {
@@ -261,7 +266,6 @@ public:
      */
     deque(deque&& other, const std::type_identity_t<Allocator>& allocator) noexcept 
         : num_chunks(0),
-          num_elements(0),
           begin_chunk(nullptr),
           end_chunk(nullptr),
           data(nullptr),
@@ -273,7 +277,6 @@ public:
         std::swap(end_iterator, other.end_iterator);
         std::swap(begin_chunk, other.begin_chunk);
         std::swap(end_chunk, other.end_chunk);
-        std::swap(num_elements, other.num_elements);
     }
 
     /**
@@ -300,11 +303,11 @@ public:
 
         if constexpr (std::is_nothrow_copy_constructible_v<T> && std::is_nothrow_destructible_v<T>) {
             size_type total_capacity = (end_chunk - begin_chunk) * CHUNK_SIZE<T>;
-            if (total_capacity >= other.num_elements) {
+            size_type other_size = other.size();
+            if (total_capacity >= other_size) {
                 destroy(begin_iterator, end_iterator, allocator);
-                begin_iterator = iterator(begin_chunk, *begin_chunk) + (total_capacity - other.num_elements) / 2;
+                begin_iterator = iterator(begin_chunk, *begin_chunk) + (total_capacity - other_size) / 2;
                 end_iterator = uninitialized_copy(other.cbegin(), other.cend(), begin_iterator, allocator);
-                num_elements = other.num_elements;
                 allocator = other.allocator;
                 pointer_allocator = other.pointer_allocator;
                 return *this;
@@ -349,6 +352,30 @@ public:
     }
 
     /**
+     * @brief Replaces the contents with count copies of a given value
+     * 
+     * @param count the number of times the value should be copied
+     * @param value the value to copy
+     */
+    void assign(size_type count, const value_type& value) {
+        clear();
+        insert(begin(), count, value);
+    }
+
+    /**
+     * @brief Replaces the contents with copies of those in a given range
+     * 
+     * @tparam InputIt the type of the input iterator
+     * @param first the beginning of the range to copy the elements from
+     * @param last the end of the range to copy the elements from
+     */
+    template<typename InputIt>
+    void assign(InputIt first, InputIt last) requires conjugate_uninitialized_input_iterator<InputIt, value_type> {
+        clear();
+        insert(begin(), first, last);
+    }
+
+    /**
      * @brief Get a copy of the associated allocator
      */
     allocator_type get_allocator() {
@@ -361,8 +388,8 @@ public:
      * @param pos the position of the element
      * @return a reference to the element
      */
-    reference operator[](size_type pos) {
-        return const_cast<reference>(static_cast<const deque&>(*this)[pos]);
+    reference operator[](size_type pos) noexcept {
+        return begin_iterator.plus_positive(pos);
     }
 
     /**
@@ -371,23 +398,22 @@ public:
      * @param pos the position of the element
      * @return a const reference to the element
      */
-    const_reference operator[](size_type pos) const {
-        iterator it = begin_iterator + pos;
-        return *it;
+    const_reference operator[](size_type pos) const noexcept {
+        return begin_iterator.plus_positive(pos);
     }
 
     /**
      * @brief Get a reference to the first element in the deque
      */
-    reference front() const {
+    reference front() const noexcept {
         return *begin_iterator;
     }
 
     /**
      * @brief Get a reference to the last element in the deque
      */
-    reference back() const {
-        return *(end_iterator - 1);
+    reference back() const noexcept {
+        return *(std::prev(end_iterator));
     }
 
     /**
@@ -486,14 +512,192 @@ public:
      * @brief Return true if this deque contains no elements
      */
     bool empty() const noexcept {
-        return num_elements == 0;
+        return begin_iterator == end_iterator;
     }
 
     /**
      * @brief Get the number of elements in this deque
      */
     size_type size() const noexcept {
-        return num_elements;
+        return std::distance(begin_iterator, end_iterator);
+    }
+
+private:
+    void deque_memmove_helper(iterator& curr, iterator& dest, std::ptrdiff_t amount) {
+        std::size_t amount_in_byte = amount * sizeof(value_type);
+        std::ptrdiff_t space = CHUNK_SIZE<value_type> - (dest.inner_pointer - *dest.outer_pointer);
+        std::size_t space_in_byte = space * sizeof(value_type);
+        if (amount >= space) {
+            std::memmove(dest.inner_pointer, curr.inner_pointer, space_in_byte);
+            curr.inner_pointer += space;
+            dest.to_next_chunk();
+            std::size_t remain = amount_in_byte - space_in_byte;
+            std::memmove(dest.inner_pointer, curr.inner_pointer, remain);
+            dest.inner_pointer += amount - space;
+        } else {
+            std::memmove(dest.inner_pointer, curr.inner_pointer, amount_in_byte);
+            dest.inner_pointer += amount;
+        }
+    }
+
+    iterator deque_move_with_memmove(iterator first, iterator last, iterator dest) {
+        if (first.outer_pointer != last.outer_pointer) {
+            // The first chunk may have uninitialized elements at the beginning
+            std::ptrdiff_t amount = CHUNK_SIZE<value_type> - (first.inner_pointer - *first.outer_pointer);
+            deque_memmove_helper(first, dest, amount);
+            first.to_next_chunk();
+        }
+        std::size_t chunk_in_byte = CHUNK_SIZE<value_type> * sizeof(value_type);
+        for (; first.outer_pointer != last.outer_pointer;) {
+            std::ptrdiff_t space = CHUNK_SIZE<value_type> - (dest.inner_pointer - *dest.outer_pointer);
+            std::size_t space_in_byte = space * sizeof(value_type);
+            std::memmove(dest.inner_pointer, first.inner_pointer, space_in_byte);
+            first.inner_pointer += space;
+            dest.to_next_chunk();
+            std::size_t remain = chunk_in_byte - space_in_byte;
+            std::memmove(dest.inner_pointer, first.inner_pointer, remain);
+            first.to_next_chunk();
+            dest.inner_pointer += CHUNK_SIZE<value_type> - space;
+        }
+        // The last chunk may have uninitialized elements at the end
+        std::ptrdiff_t amount = last.inner_pointer - first.inner_pointer;
+        deque_memmove_helper(first, dest, amount);
+        return dest;
+    }
+
+    template <bool NoThrowMove>
+    iterator deque_try_move(iterator first, iterator last, iterator dest) {
+        // value type is always non-volatile
+        if constexpr (std::is_trivially_copy_assignable_v<value_type> || std::is_trivially_move_assignable_v<value_type>) {
+            iterator res = deque_move_with_memmove(first, last, dest);
+            return res;
+        } else {
+            return try_move<NoThrowMove>(first, last, dest);
+        }
+    }
+
+    void deque_memmove_backward_helper(iterator& curr, iterator& d_last, std::ptrdiff_t amount) {
+        std::size_t amount_in_byte = amount * sizeof(value_type);
+        std::ptrdiff_t space = d_last.inner_pointer - *d_last.outer_pointer;
+        std::size_t space_in_byte = space * sizeof(value_type);
+        if (amount >= space) {
+            curr.inner_pointer -= space;
+            std::memmove(*d_last.outer_pointer, curr.inner_pointer, space_in_byte);
+            d_last.to_prev_chunk();
+            std::size_t remain = amount - space;
+            d_last.inner_pointer -= remain;
+            curr.inner_pointer -= remain;
+            std::memmove(d_last.inner_pointer, curr.inner_pointer, amount_in_byte - space_in_byte);
+        } else {
+            d_last.inner_pointer -= amount;
+            curr.inner_pointer -= amount;
+            std::memmove(d_last.inner_pointer, curr.inner_pointer, amount_in_byte);
+        }
+    }
+
+    iterator deque_move_backwards_with_memmove(iterator first, iterator last, iterator d_last) {
+        if (first == last) {
+            return d_last;
+        }
+        if (last.inner_pointer == *last.outer_pointer) {
+            last.to_prev_chunk();
+        }
+        if (d_last.inner_pointer == *d_last.outer_pointer) {
+            d_last.to_prev_chunk();
+        }
+        if (last.outer_pointer != first.outer_pointer) {
+            // The last chunk may have uninitialized elements at the end
+            std::ptrdiff_t amount = last.inner_pointer - *last.outer_pointer;
+            deque_memmove_backward_helper(last, d_last, amount);
+            last.to_prev_chunk();
+        }
+        std::size_t chunk_in_byte = CHUNK_SIZE<value_type> * sizeof(value_type);
+        for (; last.outer_pointer != first.outer_pointer;) {
+            std::ptrdiff_t space = d_last.inner_pointer - *d_last.outer_pointer;
+            std::size_t space_in_byte = space * sizeof(value_type);
+            last.inner_pointer -= space;
+            std::memmove(*d_last.outer_pointer, last.inner_pointer, space_in_byte);
+            d_last.to_prev_chunk();
+            std::size_t remain = chunk_in_byte - space_in_byte;
+            d_last.inner_pointer -= CHUNK_SIZE<value_type> - space;
+            std::memmove(d_last.inner_pointer, *last.outer_pointer, remain);
+            last.to_prev_chunk();
+        }
+        // The first chunk may have uninitialized elements at the beginning
+        std::ptrdiff_t amount = last.inner_pointer - first.inner_pointer;
+        deque_memmove_backward_helper(last, d_last, amount);
+        if (d_last.inner_pointer == d_last.chunk_end) {
+            d_last.to_next_chunk();
+        }
+        return d_last;
+    }
+
+    template <bool NoThrowMove>
+    iterator deque_try_move_backwards(iterator first, iterator last, iterator d_last) {
+        // value type is always non-volatile
+        if constexpr (std::is_trivially_copy_assignable_v<value_type> || std::is_trivially_move_assignable_v<value_type>) {
+            return deque_move_backwards_with_memmove(first, last, d_last);
+        } else {
+            return try_move_backwards<NoThrowMove>(first, last, d_last);
+        }
+    }
+
+public:
+
+    /**
+     * @brief Reallocate minimum memory to hold all elements if some capacity
+     *        is unused. Do nothing if there is no unused capacity.
+     */
+    void shrink_to_fit() {
+        T** begin_iterator_chunk = begin_iterator.outer_pointer;
+        T** end_iterator_chunk = end_iterator.outer_pointer + 1;
+        std::size_t ghost_capacity = num_chunks * CHUNK_SIZE<value_type>;
+        std::size_t minimum_capacity = CHUNK_PADDING * CHUNK_SIZE<value_type>;
+        // plus one since we have an invariant that end_iterator must point to a valid chunk
+        size_type num_elements = size();
+        std::size_t needed_capacity = num_elements + 1;
+        std::size_t occupied_capacity = (end_iterator_chunk - begin_iterator_chunk) * CHUNK_SIZE<value_type>;
+        // Cannot be shrunk anymore
+        if (needed_capacity + CHUNK_SIZE<value_type> > occupied_capacity && 
+            (occupied_capacity == ghost_capacity || occupied_capacity <= minimum_capacity)) {
+            return;
+        }
+        // Move elements to the beginning of the begin_iterator_chunk
+        if (needed_capacity + CHUNK_SIZE<value_type> <= occupied_capacity) {
+            iterator new_begin_iterator(begin_iterator.outer_pointer, *begin_iterator.outer_pointer);
+            difference_type uninitialized_move_amount = std::min<difference_type>(begin_iterator - new_begin_iterator, num_elements);
+            iterator initialized_src_begin = begin_iterator + uninitialized_move_amount;
+            try_uninitialized_move<true>(begin_iterator, initialized_src_begin, new_begin_iterator, allocator);
+            deque_try_move<true>(initialized_src_begin, end_iterator, new_begin_iterator + uninitialized_move_amount);
+            destroy(end_iterator - uninitialized_move_amount, end_iterator, allocator);
+            --end_iterator_chunk;
+            begin_iterator = new_begin_iterator;
+            end_iterator = begin_iterator + num_elements;
+            // At this point the deque should be valid again
+        }
+        // We update begin_chunk and end_chunk on the fly so the deque remains valid
+        for (; begin_chunk != begin_iterator_chunk; ++begin_chunk) {
+            alloc_traits::deallocate(allocator, *begin_chunk, CHUNK_SIZE<T>);
+        }
+        for (; end_chunk != end_iterator_chunk; --end_chunk) {
+            alloc_traits::deallocate(allocator, *(end_chunk - 1), CHUNK_SIZE<T>);
+        }
+        std::size_t new_num_chunks = (needed_capacity + CHUNK_SIZE<value_type> - 1) / CHUNK_SIZE<value_type>;
+        T** sentinel = pointer_alloc_traits::allocate(pointer_allocator, new_num_chunks + 2);
+        std::fill_n(sentinel, new_num_chunks + 2, nullptr);
+        std::unique_ptr<T*[], deleter<T*, pointer_allocator_type> > cleaner(
+            sentinel, deleter<T*, pointer_allocator_type>(new_num_chunks + 2, pointer_allocator));
+        T** new_data = sentinel + 1;
+        std::copy(begin_iterator_chunk, end_iterator_chunk, new_data);
+        pointer_alloc_traits::deallocate(pointer_allocator, data - 1, num_chunks + 2);
+        cleaner.release();
+        // All operations that may throw are done. We can proceed to update the deque to use the new data
+        num_chunks = new_num_chunks;
+        begin_iterator.outer_pointer = new_data;
+        end_iterator = begin_iterator + num_elements;
+        begin_chunk = new_data;
+        end_chunk = begin_chunk + (end_iterator_chunk - begin_iterator_chunk);
+        data = new_data;
     }
 
 private:
@@ -511,6 +715,7 @@ private:
      * @param end_iterator_chunk pointing to first chunk >= begin iterator chunk such that is holds no elements
      */
     void reallocate_end(size_type num_new_chunks, T** begin_iterator_chunk, T** end_iterator_chunk) {
+        size_type num_elements = end_iterator - begin_iterator;
         size_type active_chunks = end_iterator_chunk - begin_iterator_chunk + num_new_chunks;
         size_type new_num_chunks = active_chunks * 3;
         T** sentinel = pointer_alloc_traits::allocate(pointer_allocator, new_num_chunks + 2);
@@ -548,14 +753,15 @@ private:
             try {
                 while (p < new_end_chunk) {
                     *p = alloc_traits::allocate(allocator, CHUNK_SIZE<T>);
-                    p++;
+                    ++p;
                 }
             } catch (...) {
-                for (T** q = missing_start; q < p; q++) {
+                for (T** q = missing_start; q < p; ++q) {
                     alloc_traits::deallocate(allocator, *q, CHUNK_SIZE<T>);
                 }
                 throw;
             }
+            // It is safe to update state since memory allocation is over
             begin_chunk = new_begin_chunk;
             end_chunk = new_end_chunk;
         }
@@ -564,18 +770,13 @@ private:
         size_type old_num_chunks = num_chunks;
         num_chunks = new_num_chunks;
         begin_iterator.outer_pointer = new_begin_chunk;
-        // Special case: if this deque contains no element, the chunk pointed to by
-        // the old begin and end iterators may be reappropriated
-        if (num_elements == 0) {
-            begin_iterator.inner_pointer = *begin_iterator.outer_pointer;
-        }
         end_iterator = begin_iterator + num_elements;
         // delete expression can't throw since delete operator can't throw and pointers have trivial destructor
         pointer_alloc_traits::deallocate(pointer_allocator, data - 1, old_num_chunks + 2);
         data = new_data;
     }
 
-    void center(std::ptrdiff_t left, std::ptrdiff_t right) {
+    void center(std::ptrdiff_t left, std::ptrdiff_t right) noexcept {
         std::ptrdiff_t donation = (right - left) / 2;
         if (donation >= 0) {
             // Too many on the right
@@ -591,13 +792,11 @@ private:
     }
 
     void rearrange_end(size_type num_new_chunks, T** begin_iterator_chunk, T** end_iterator_chunk) {
+        size_type num_elements = end_iterator - begin_iterator;
         size_type active_chunks = end_iterator_chunk - begin_iterator_chunk + num_new_chunks;
         T** new_begin_chunk = data + (num_chunks - active_chunks) / 2;
         T** new_end_iterator_chunk = std::swap_ranges(begin_iterator_chunk, end_iterator_chunk, new_begin_chunk);
         begin_iterator.outer_pointer = new_begin_chunk;
-        if (num_elements == 0) {
-            begin_iterator.inner_pointer = *begin_iterator.outer_pointer;
-        }
         end_iterator = begin_iterator + num_elements;
         if (begin_chunk > new_begin_chunk) {
             /*         bic ec
@@ -624,7 +823,7 @@ private:
             T** new_end_chunk = new_begin_chunk + active_chunks;
             bool balanced = end_chunk <= new_end_chunk + 1;
             // We don't need to free the chunks if we encounter an exception
-            // Update begin_chunk on the fly 
+            // Update end_chunk on the fly 
             while (end_chunk < new_end_chunk) {
                 *end_chunk = alloc_traits::allocate(allocator, CHUNK_SIZE<T>);
                 ++end_chunk;
@@ -658,8 +857,13 @@ private:
         // We shouldn't always triple the size since there could be very few active chunks
         // We just need to move them to the center
         T** begin_iterator_chunk = begin_iterator.outer_pointer;
-        T** end_iterator_chunk = num_elements == 0 ? begin_iterator_chunk
-            : (end_iterator - 1).outer_pointer + 1;
+        T** end_iterator_chunk = end_iterator.outer_pointer;
+        // end_iterator_chunk should be the chunk after the one pointed to by end_iterator
+        // if end_iterator points to a valid chunk. Otherwise, it should be the chunk pointed
+        // to by the end_iterator
+        if (end_iterator.inner_pointer != nullptr) {
+            ++end_iterator_chunk;
+        }
 
         size_type active_chunks = end_iterator_chunk - begin_iterator_chunk + 
                                    num_new_chunks;
@@ -670,18 +874,30 @@ private:
         }
     }
 
-    void allocate_tail_space() {
-        if (end_iterator.outer_pointer == data + num_chunks) {
-            make_room_end(1);
-        } else if (*end_iterator.outer_pointer == nullptr) {
-            T* memory = alloc_traits::allocate(allocator, CHUNK_SIZE<T>);
-            ++end_chunk;
-            std::ptrdiff_t diff = *end_iterator.outer_pointer - end_iterator.inner_pointer;
-            *end_iterator.outer_pointer = memory;
-            if (*begin_iterator.outer_pointer == memory) {
-                begin_iterator.inner_pointer = memory + diff;
+    /**
+     * @brief Handle the case if we are at the one past end of the current chunk
+     *        after a push_back or an emplace_back
+     * If a new chunk needs to be allocated, it will do so. If any allocation fails,
+     * restore states to the state prior to the push_back/emplace_back
+     */
+    void handle_chunk_end() {
+        end_iterator.to_next_chunk();
+        try {
+            if (end_iterator.outer_pointer == data + num_chunks) {
+                make_room_end(1);
+            } else if (end_iterator.inner_pointer == nullptr) {
+                T* memory = alloc_traits::allocate(allocator, CHUNK_SIZE<T>);
+                ++end_chunk;
+                *end_iterator.outer_pointer = memory;
+                end_iterator.inner_pointer = memory;
+                end_iterator.chunk_begin = memory;
+                end_iterator.chunk_end = memory + CHUNK_SIZE<T>;
             }
-            end_iterator.inner_pointer = memory + diff;
+        } catch (...) {
+            end_iterator.to_prev_chunk();
+            --end_iterator.inner_pointer;
+            alloc_traits::destroy(allocator, end_iterator.inner_pointer);
+            throw;
         }
     }
 
@@ -691,11 +907,13 @@ public:
      * 
      * @param value the element to append
      */
-    void push_back(const_reference value) requires std::is_copy_constructible_v<T> {
-        allocate_tail_space();
+    void
+    push_back(const_reference value) requires std::is_copy_constructible_v<T> {
         alloc_traits::construct(allocator, end_iterator.inner_pointer, value);
-        ++end_iterator;
-        ++num_elements;
+        ++end_iterator.inner_pointer;
+        if (end_iterator.inner_pointer == end_iterator.chunk_end) {
+            handle_chunk_end();
+        }
     }
 
     /**
@@ -704,35 +922,35 @@ public:
      * @param value the element to append
      */
     void push_back(value_type&& value) requires std::move_constructible<T> {
-        allocate_tail_space();
         alloc_traits::construct(allocator, end_iterator.inner_pointer, std::move(value));
-        ++end_iterator;
-        ++num_elements;
+        ++end_iterator.inner_pointer;
+        if (end_iterator.inner_pointer == end_iterator.chunk_end) {
+            handle_chunk_end();
+        }
     }
 
     /**
      * @brief Construct and append an element to the end of the deque in-place
      * 
-     * @param args the arguments used to construct the elements in place
+     * @param arogs the arguments used to construct the elements in place
      */
     template<typename... Args>
     reference emplace_back(Args&&... args) {
-        allocate_tail_space();
         alloc_traits::construct(allocator, end_iterator.inner_pointer, std::forward<Args>(args)...);
         reference res = *end_iterator.inner_pointer;
-        ++end_iterator;
-        ++num_elements;
+        ++end_iterator.inner_pointer;
+        if (end_iterator.inner_pointer == end_iterator.chunk_end) {
+            handle_chunk_end();
+        }
         return res;
     }
 
     /**
      * @brief Removes the last element of the container.
      */
-    void pop_back() noexcept(std::is_nothrow_destructible_v<T>) {
-        iterator new_end_iterator = end_iterator - 1;
-        alloc_traits::destroy(allocator, new_end_iterator.inner_pointer);
-        end_iterator = new_end_iterator;
-        --num_elements;
+    void pop_back() noexcept {
+        --end_iterator;
+        alloc_traits::destroy(allocator, end_iterator.inner_pointer);
     }
 
 private:
@@ -750,6 +968,7 @@ private:
      * @param end_iterator_chunk pointing to first chunk >= begin iterator chunk which holds no elements
      */
     void reallocate_begin(size_type num_new_chunks, T** begin_iterator_chunk, T** end_iterator_chunk) {
+        size_type num_elements = end_iterator - begin_iterator;
         size_type active_chunks = end_iterator_chunk - begin_iterator_chunk + num_new_chunks;
         size_type new_num_chunks = active_chunks * 3;
         T** sentinel = pointer_alloc_traits::allocate(pointer_allocator, new_num_chunks + 2);
@@ -776,7 +995,7 @@ private:
          *      bc    ec
          */
         T** new_begin_chunk = new_data + active_chunks;
-        T** new_end_chunk = new_data + active_chunks * 2;
+        T** new_end_chunk = new_begin_chunk + active_chunks;
         T** missing_end = std::copy_backward(begin_chunk, end_iterator_chunk, new_end_chunk);
         std::ptrdiff_t needed = missing_end - new_begin_chunk;
         std::ptrdiff_t num_free_chunks = end_chunk - end_iterator_chunk;
@@ -791,10 +1010,10 @@ private:
             try {
                 while (p < fill_end) {
                     *p = alloc_traits::allocate(allocator, CHUNK_SIZE<T>);
-                    p++;
+                    ++p;
                 }
             } catch (...) {
-                for (T** q = new_begin_chunk; q < p; q++) {
+                for (T** q = new_begin_chunk; q < p; ++q) {
                     alloc_traits::deallocate(allocator, *q, CHUNK_SIZE<T>);
                 }
                 throw;
@@ -807,11 +1026,6 @@ private:
         size_type old_num_chunks = num_chunks;
         num_chunks = new_num_chunks;
         begin_iterator.outer_pointer = new_begin_chunk + num_new_chunks;
-        // Special case: if this deque contains no element, the chunk pointed to by
-        // the old begin and end iterators may be reappropriated
-        if (num_elements == 0) {
-            begin_iterator.inner_pointer = *begin_iterator.outer_pointer;
-        }
         end_iterator = begin_iterator + num_elements;
         // delete expression can't throw since delete operator can't throw and pointers have trivial destructor
         pointer_alloc_traits::deallocate(pointer_allocator, data - 1, old_num_chunks + 2);
@@ -832,14 +1046,12 @@ private:
      * @param end_iterator_chunk pointing to first chunk >= begin iterator chunk such that is holds no elements
      */
     void rearrange_begin(size_type num_new_chunks, T** begin_iterator_chunk, T** end_iterator_chunk) {
+        size_type num_elements = end_iterator - begin_iterator;
         size_type active_chunks = end_iterator_chunk - begin_iterator_chunk + num_new_chunks;
         T** new_begin_chunk = data + (num_chunks - active_chunks) / 2;
         T** new_begin_iterator_chunk = new_begin_chunk + num_new_chunks;
         T** new_end_iterator_chunk = std::swap_ranges(begin_iterator_chunk, end_iterator_chunk, new_begin_iterator_chunk);
         begin_iterator.outer_pointer = new_begin_iterator_chunk;
-        if (num_elements == 0) {
-            begin_iterator.inner_pointer = *begin_iterator.outer_pointer;
-        }
         end_iterator = begin_iterator + num_elements;
         if (end_chunk < new_end_iterator_chunk) {
             /*
@@ -910,8 +1122,7 @@ private:
         // We shouldn't always triple the size since there could be very few active chunks
         // We just need to move them to the center
         T** begin_iterator_chunk = begin_iterator.outer_pointer;
-        T** end_iterator_chunk = num_elements == 0 ? begin_iterator_chunk
-            : (end_iterator - 1).outer_pointer + 1;
+        T** end_iterator_chunk = end_iterator.outer_pointer + 1;
 
         size_type active_chunks = end_iterator_chunk - begin_iterator_chunk + 
                                     num_new_chunks;
@@ -922,24 +1133,28 @@ private:
         }
     }
 
-    iterator allocate_front_space() {
-        if (begin_iterator.outer_pointer == data && begin_iterator.inner_pointer == *begin_iterator.outer_pointer) {
+    template<typename... Args>
+    void handle_chunk_begin(Args&&... args) {
+        if (begin_iterator.inner_pointer == *data) {
             make_room_begin(1);
-            return begin_iterator - 1;
-        }
-        
-        iterator prior = begin_iterator - 1;
-        if (*prior.outer_pointer == nullptr) {
+            --begin_iterator.outer_pointer;
+        } else if (begin_iterator.outer_pointer == begin_chunk) {
             T* memory = alloc_traits::allocate(allocator, CHUNK_SIZE<T>);
-            begin_chunk--;
-            std::ptrdiff_t diff = prior.inner_pointer - *prior.outer_pointer;
-            *prior.outer_pointer = memory;
-            if (*end_iterator.outer_pointer == memory) {
-                end_iterator.inner_pointer = memory + diff;
-            }
-            prior.inner_pointer = memory + diff;
+            --begin_iterator.outer_pointer;
+            *begin_iterator.outer_pointer = memory;
+            --begin_chunk;
+        } else {
+            --begin_iterator.outer_pointer;
         }
-        return prior;
+        begin_iterator.chunk_begin = *begin_iterator.outer_pointer;
+        begin_iterator.inner_pointer = begin_iterator.chunk_begin + (CHUNK_SIZE<T> - 1);
+        begin_iterator.chunk_end = begin_iterator.inner_pointer + 1;
+        try {
+            alloc_traits::construct(allocator, begin_iterator.inner_pointer, std::forward<Args>(args)...);
+        } catch (...) {
+            begin_iterator.to_next_chunk();
+            throw;
+        }
     }
     
 public:
@@ -949,10 +1164,12 @@ public:
      * @param value the element to append
      */
     void push_front(const_reference value) requires std::is_copy_constructible_v<T> {
-        iterator prior = allocate_front_space();
-        alloc_traits::construct(allocator, prior.inner_pointer, value);
-        begin_iterator = prior;
-        ++num_elements;
+        if (begin_iterator.chunk_begin != begin_iterator.inner_pointer) {
+            alloc_traits::construct(allocator, begin_iterator.inner_pointer - 1, value);
+            --begin_iterator.inner_pointer;
+        } else {
+            handle_chunk_begin(value);
+        }
     }
 
     /**
@@ -961,30 +1178,86 @@ public:
      * @param value the element to append
      */
     void push_front(value_type&& value) requires std::move_constructible<T> {
-        iterator prior = allocate_front_space();
-        alloc_traits::construct(allocator, prior.inner_pointer, std::move(value));
-        begin_iterator = prior;
-        ++num_elements;
+        if (begin_iterator.chunk_begin != begin_iterator.inner_pointer) {
+            alloc_traits::construct(allocator, begin_iterator.inner_pointer - 1, std::move(value));
+            --begin_iterator.inner_pointer;
+        } else {
+            handle_chunk_begin(std::move(value));
+        }
     }
 
     /**
-     * @brief Construct and prepend an element to the beginning of the deque in-place
+     * @brief Construct in-place and prepend an element to the beginning of the deque
      * 
      * @param args the arguments used to construct the elements in place
      */
     template<typename... Args>
     reference emplace_front(Args&&... args) {
-        iterator prior = allocate_front_space();
-        alloc_traits::construct(allocator, prior.inner_pointer, std::forward<Args>(args)...);
-        begin_iterator = prior;
-        ++num_elements;
+        if (begin_iterator.chunk_begin != begin_iterator.inner_pointer) {
+            alloc_traits::construct(allocator, begin_iterator.inner_pointer - 1, std::forward<Args>(args)...);
+            --begin_iterator.inner_pointer;
+        } else {
+            handle_chunk_begin(std::forward<Args>(args)...);
+        }
         return *begin_iterator.inner_pointer;
     }
 
-    void pop_front() {
+    /**
+     * @brief Removes the first element of the container.
+     */
+    void pop_front() noexcept {
         alloc_traits::destroy(allocator, begin_iterator.inner_pointer);
         ++begin_iterator;
-        --num_elements;
+    }
+
+    /**
+     * @brief Resizes the container to contain count number of elements, does nothing
+     *        if the current size equals to count
+     * 
+     * If the new size is greater than the current size, additional default-constructed elements are appended
+     * If the new size is less than the current size, extra elements will be erased from the end
+     * 
+     * @param count the new size of this deque
+     */
+    void resize(size_type count) {
+        size_type num_elements = size();
+        if (count == num_elements) {
+            return;
+        }
+        if (count < num_elements) {
+            erase(end() - (num_elements - count), end());
+        } else {
+            iterator uninitialized_begin, initialized_begin;
+            std::size_t extra = count - num_elements;
+            insert_shift_end(end_iterator, extra, initialized_begin, uninitialized_begin);
+            uninitialized_default_construct(uninitialized_begin, uninitialized_begin + extra, allocator);
+            num_elements = count;
+        }
+    }
+
+    /**
+     * @brief Resizes the container to contain count number of elements, does nothing
+     *        if the current size equals to count
+     * 
+     * If the new size is greater than the current size, additional elements are appended by copying the given value
+     * If the new size is less than the current size, extra elements will be erased from the end
+     * 
+     * @param count the new size of this deque
+     */
+    void resize(size_type count, const_reference value) {
+        size_type num_elements = size();
+        if (count == num_elements) {
+            return;
+        }
+        if (count < num_elements) {
+            erase(end() - (num_elements - count), end());
+        } else {
+            iterator uninitialized_begin, initialized_begin;
+            std::size_t extra = count - num_elements;
+            insert_shift_end(end_iterator, extra, initialized_begin, uninitialized_begin);
+            uninitialized_fill(uninitialized_begin, uninitialized_begin + extra, value, allocator);
+            num_elements = count;
+        }
     }
 
 private:
@@ -1067,10 +1340,10 @@ private:
             uninitialized_src_end = pos - (uninitialized_begin - begin_iterator);
         }
         iterator cont;
-        // If we can move, we move. The value must be copy constructible when we reach this method, 
-        // so copy should always bs a valid backup
-        cont = try_uninitialized_move(begin_iterator, uninitialized_src_end, new_begin_iterator, allocator);
-        try_move(uninitialized_src_end, pos, cont);
+
+        cont = try_uninitialized_move<false>(begin_iterator, uninitialized_src_end, new_begin_iterator, allocator);
+
+        deque_try_move<false>(uninitialized_src_end, pos, cont);
 
         if (uninitialized_begin <= begin_iterator) {
             initialized_begin = begin_iterator;
@@ -1085,42 +1358,34 @@ private:
         difference_type amount = space;
         difference_type offset = end_iterator - pos;
         difference_type remain = iterator(data + num_chunks, data[num_chunks]) - end_iterator;
-        difference_type ghost_rbegin = end_iterator - iterator(data, *data) + amount - 1;
-        T** new_end_chunk = data + ghost_rbegin / CHUNK_SIZE<T> + 1;
-        if (remain < amount) {
-            T** end_iterator_chunk = num_elements == 0 ? begin_iterator.outer_pointer
-                                                       : (end_iterator - 1).outer_pointer + 1;
+        // end_iterator must point to a valid chunk after shifting
+        difference_type ghost_end = end_iterator - iterator(data, *data) + amount;
+        T** new_end_chunk = data + ghost_end / CHUNK_SIZE<T> + 1;
+        // less than or equal to since end iterator must point to an allocated chunk
+        if (remain <= amount) {
+            T** end_iterator_chunk = end_iterator.outer_pointer + 1;
             make_room_end(new_end_chunk - end_iterator_chunk);
         } else {
-            T** fill_end = (end_iterator + (amount - 1)).outer_pointer + 1;
+            T** fill_end = (end_iterator + amount).outer_pointer + 1;
             // If we already have all chunks allocated, we don't need to allocate any more
             if (end_chunk < fill_end) {
                 T** p = end_chunk;
                 try {
-                    for (; p < fill_end; p++) {
+                    for (; p < fill_end; ++p) {
                         *p = alloc_traits::allocate(allocator, CHUNK_SIZE<T>);
                     }
                 } catch (...) {
-                    for (T** q = end_chunk; q < p; q++) {
+                    for (T** q = end_chunk; q < p; ++q) {
                         alloc_traits::deallocate(allocator, *q, CHUNK_SIZE<T>);
                     }
                     throw;
                 }
                 end_chunk = fill_end;
-                // If end_iterator points to beginning of an unallocated end iterator chunk
-                // update its inner pointer since the memory has been allocated
-                if (end_iterator.inner_pointer == nullptr) {
-                    end_iterator.inner_pointer = *end_iterator.outer_pointer;
-                    // If the deque is empty, we need to update begin_iterator as well
-                    if (num_elements == 0) {
-                        begin_iterator == end_iterator;
-                    }
-                }
             }
         }
         pos = end_iterator - offset;
         initialized_begin = pos;
-        iterator new_end_iterator = end_iterator + amount;
+        iterator new_end_iterator = amount == 1 ? std::next(end_iterator) : (end_iterator + amount);
         // If we are appending, there is nothing to move. 
         if (offset == 0) {
             uninitialized_begin = pos;
@@ -1158,20 +1423,16 @@ private:
         }
         // If we can move, we move. The value must be copy constructible when we reach this method, 
         // so copy should always bs a valid backup
-        try_uninitialized_move(
-            reverse_iterator(end_iterator - 1),
-            reverse_iterator(uninitialized_src_begin - 1), 
-            reverse_iterator(new_end_iterator - 1),
+        try_uninitialized_move<false>(
+            reverse_iterator(std::prev(end_iterator)),
+            reverse_iterator(std::prev(uninitialized_src_begin)),
+            reverse_iterator(std::prev(new_end_iterator)),
             allocator
         );
         difference_type initialized_count = uninitialized_src_begin - pos;
-        if constexpr (std::is_move_assignable_v<T>) {
-            std::move_backward(pos, uninitialized_src_begin, moved_dest_begin + initialized_count);
-        } else {
-            std::copy_backward(pos, uninitialized_src_begin, moved_dest_begin + initialized_count);
-        }
+        deque_try_move_backwards<false>(pos, uninitialized_src_begin, moved_dest_begin + initialized_count);
         if (moved_dest_begin <= end_iterator) {
-            uninitialized_begin = pos + amount;
+            uninitialized_begin = amount == 1 ? std::next(pos) : (pos + amount);
         } else {
             uninitialized_begin = end_iterator;
         }
@@ -1187,13 +1448,13 @@ private:
         }
         if (pos == end_iterator) {
             emplace_back(std::forward<Args>(args)...);
-            return end_iterator - 1;
+            return std::prev(end_iterator);
         }
         unsigned long offset = pos - begin_iterator;
         iterator uninitialized_begin, initialized_begin;
         // cpp20 standard 22.3.8.4.3 states that the time complexity must be the lesser of the
         // distance from pos to either ends
-        if (offset * 2 <= num_elements) {
+        if (offset * 2 <= size()) {
             insert_shift_begin(iterator(pos), 1, uninitialized_begin, initialized_begin);
         } else {
             insert_shift_end(iterator(pos), 1, initialized_begin, uninitialized_begin);
@@ -1202,7 +1463,6 @@ private:
         // Allocator aware data structure doesn't play well with assignment
         alloc_traits::destroy(allocator, std::addressof(*initialized_begin));
         alloc_traits::construct(allocator, std::addressof(*initialized_begin), std::forward<Args>(args)...);
-        ++num_elements;
         return initialized_begin;
     }
 
@@ -1260,7 +1520,7 @@ public:
         iterator uninitialized_begin, initialized_begin;
         // cpp20 standard 22.3.8.4.3 states that the time complexity must be the lesser of the
         // distance from pos to either ends
-        if (offset * 2 <= num_elements) {
+        if (offset * 2 <= size()) {
             insert_shift_begin(iterator(pos), count, uninitialized_begin, initialized_begin);
             uninitialized_fill(uninitialized_begin, initialized_begin, value, allocator);
             std::fill_n(initialized_begin, count - (initialized_begin - uninitialized_begin), value);
@@ -1269,7 +1529,6 @@ public:
             std::fill(initialized_begin, uninitialized_begin, value);
             uninitialized_fill(uninitialized_begin, uninitialized_begin + count - (uninitialized_begin - initialized_begin), value, allocator);
         }
-        num_elements += count;
         return begin_iterator + offset;
     }
 
@@ -1295,7 +1554,7 @@ public:
         }
         unsigned long offset = pos - begin_iterator;
         iterator uninitialized_begin, initialized_begin;
-        if (offset * 2 <= num_elements) {
+        if (offset * 2 <= size()) {
             insert_shift_begin(iterator(pos), count, uninitialized_begin, initialized_begin);
             difference_type uninitialized_count = initialized_begin - uninitialized_begin;
             uninitialized_copy(first, first + uninitialized_count, uninitialized_begin, allocator);
@@ -1308,7 +1567,6 @@ public:
             first = std::next(first, initialized_count);
             uninitialized_copy(first, first + (count - initialized_count), uninitialized_begin, allocator);
         }
-        num_elements += count;
         return begin_iterator + offset;
     }
 
@@ -1341,20 +1599,16 @@ public:
 
 private:
     void erase_shift_begin(iterator first, iterator last) {
-        if constexpr(std::is_move_assignable_v<T>) {
-            std::move_backward(begin_iterator, first, last);
-        } else {
-            std::copy_backward(begin_iterator, first, last);
-        }
+        deque_try_move_backwards<false>(begin_iterator, first, last);
         iterator new_begin_iterator = begin_iterator + (last - first);
         destroy(begin_iterator, new_begin_iterator, allocator);
         begin_iterator = new_begin_iterator;
     }
 
     void erase_shift_end(iterator first, iterator last) {
-        try_move(last, end_iterator, first);
-        reverse_iterator new_end_iterator = reverse_iterator(end_iterator - 1) + (last - first);
-        destroy(reverse_iterator(end_iterator - 1), new_end_iterator, allocator);
+        deque_try_move<false>(last, end_iterator, first);
+        reverse_iterator new_end_iterator = reverse_iterator(std::prev(end_iterator)) + (last - first);
+        destroy(reverse_iterator(std::prev(end_iterator)), new_end_iterator, allocator);
         end_iterator = new_end_iterator;
         ++end_iterator;
     }
@@ -1376,12 +1630,11 @@ public:
             return end_iterator;
         }
         difference_type offset = pos - begin_iterator;
-        if ((size_type) offset * 2 <= num_elements) {
-            erase_shift_begin(iterator(pos), iterator(pos + 1));
+        if ((size_type) offset * 2 <= size()) {
+            erase_shift_begin(iterator(pos), iterator(std::next(pos)));
         } else {
-            erase_shift_end(iterator(pos), iterator(pos + 1));
+            erase_shift_end(iterator(pos), iterator(std::next(pos)));
         }
-        --num_elements;
         return begin_iterator + offset;
     }
 
@@ -1397,13 +1650,11 @@ public:
         iterator non_const_last = iterator(last);
         difference_type before = non_const_first - begin_iterator;
         difference_type after = end_iterator - non_const_last;
-        difference_type count = non_const_last - non_const_first;
         if (before <= after) {
             erase_shift_begin(non_const_first, non_const_last);
         } else {
             erase_shift_end(non_const_first, non_const_last);
         }
-        num_elements -= count;
         return begin_iterator + before;
     }
 
@@ -1412,8 +1663,12 @@ public:
      */
     void clear() noexcept(std::is_nothrow_destructible_v<T>) {
         destroy(begin_iterator, end_iterator, allocator);
+        // Center the begin iterator to save future rearrangement
+        if (begin_chunk != end_chunk) {
+            begin_iterator = iterator(begin_chunk, *begin_chunk);
+            begin_iterator += (end_chunk - begin_chunk) * CHUNK_SIZE<T> / 2;
+        }
         end_iterator = begin_iterator;
-        num_elements = 0;
     }
 
     void swap(deque& other) noexcept {
@@ -1423,7 +1678,6 @@ public:
         std::swap(end_iterator, other.end_iterator);
         std::swap(begin_chunk, other.begin_chunk);
         std::swap(end_chunk, other.end_chunk);
-        std::swap(num_elements, other.num_elements);
         std::swap(allocator, other.allocator);
         std::swap(pointer_allocator, other.pointer_allocator);
     }
@@ -1455,10 +1709,7 @@ public:
     }
 
     size_type __front_capacity() {
-        if (*begin_iterator.outer_pointer == nullptr) {
-            return 0;
-        }
-        return std::distance(*begin_iterator.outer_pointer, begin_iterator.inner_pointer);
+        return std::distance(begin_iterator.chunk_begin, begin_iterator.inner_pointer);
     }
 
     size_type __front_ghost_capacity() {
@@ -1466,10 +1717,7 @@ public:
     }
 
     size_type __back_capacity() {
-        if (*end_iterator.outer_pointer == nullptr) {
-            return 0;
-        }
-        return CHUNK_SIZE<T> - std::distance(*end_iterator.outer_pointer, end_iterator.inner_pointer);
+        return std::distance(end_iterator.inner_pointer, end_iterator.chunk_end);
     }
 
     size_type __back_ghost_capacity() {
@@ -1477,8 +1725,7 @@ public:
     }
 
     size_type __get_num_active_chunks() {
-        return num_elements == 0 ? 0 : 
-            ((end_iterator - 1).outer_pointer + 1 - begin_iterator.outer_pointer);
+        return end_iterator.outer_pointer + 1 - begin_iterator.outer_pointer;
     }
 
     pointer_allocator_type& __get_pointer_allocator() {

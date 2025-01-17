@@ -3,15 +3,13 @@
 
 
 namespace algo {
-/**
- * @brief A deleter that does nothing so that compiler doesn't try to instantiate deleted node destructors
- * 
- * @tparam T the type of elements to delete
- */
-template<typename T>
-struct stub_deleter {
-    void operator()(T*) { }
-};
+
+template <typename T>
+T* move(T*& node) {
+    T* tmp = node;
+    node = nullptr;
+    return tmp;
+}
 
 /**
  * @brief CRTP base class for binary tree node
@@ -26,11 +24,10 @@ class binary_tree_node_base {
 public:
     using value_type = T;
 
-    using unique_ptr_type = std::unique_ptr<Derived, stub_deleter<Derived> >;
     value_type value;
     // Take ownership of child pointers
-    unique_ptr_type left_child;
-    unique_ptr_type right_child;
+    Derived* left_child;
+    Derived* right_child;
     // Parent pointer is only for observation
     Derived* parent;
 
@@ -98,7 +95,7 @@ public:
      * @brief Test if this node is a left_child
      */
     bool is_left_child() const noexcept {
-        return parent -> left_child.get() == this;
+        return parent -> left_child == this;
     }
 
     /**
@@ -115,230 +112,108 @@ public:
                 return nullptr;
             }
         }
-        Derived* old_child = left_child.release();
-        old_child -> parent = nullptr;
-        return old_child;
+        Derived* child = left_child;
+        left_child -> parent = nullptr;
+        left_child = nullptr;
+        return child;
     }
 
     /**
      * @brief Remove its right child if it exists
      * 
-     * @tparam NullSafe true if this node may not have a right child
+     * @tparam Nullable true if this node may not have a right child
      * @return the pointer to the right child if it exists
      *         nullptr if it doesn't
      */
-    template <bool NullSafe=true>
+    template <bool Nullable=true>
     Derived* orphan_right_child() noexcept {
-        if constexpr (NullSafe) {
+        if constexpr (Nullable) {
             if (!right_child) {
                 return nullptr;
             }
         }
-        Derived* old_child = right_child.release();
-        old_child -> parent = nullptr;
-        return old_child;
+        Derived* child = right_child;
+        right_child -> parent = nullptr;
+        right_child = nullptr;
+        return child;
     }
 
     /**
      * @brief Make a nonnull node its left child
-     * 
-     * Release ownership to the old left child
-     * 
-     * @param child a unique ptr to the new left child. Must be nonnull
-     * @return the old left child if it exists
-     *         nullptr if it doesn't
-     */
-    Derived* link_left_child(unique_ptr_type&& child) noexcept {
-        Derived* old_child = orphan_left_child();
-        left_child = std::move(child);
-        left_child -> parent = underlying_ptr();
-        return old_child;
-    }
-
-    /**
-     * @brief Make a node its left child
-     * 
-     * Release ownership to the old left child
-     * 
-     * @param child a unique ptr to the new left child. Can be null.
-     * @return the old left child if it exists
-     *         nullptr if it doesn't
-     */
-    Derived* safe_link_left_child(unique_ptr_type&& child) noexcept {
-        if (child) {
-            return link_left_child(std::move(child));
-        }
-        return orphan_left_child();
-    }
-
-    /**
-     * @brief Make a nonnull node its left child
-     * 
-     * Release ownership to the old left child
      * 
      * @param child the new left child. Must be nonnull
-     * @return the old left child if it exists
-     *         nullptr if it doesn't
      */
-    Derived* link_left_child(Derived* child) noexcept {
-        if (child == left_child.get()) {
-            return child;
-        }
-        return link_left_child(unique_ptr_type(child, left_child.get_deleter()));
+    void link_left_child(Derived* child) noexcept {
+        left_child = child;
+        left_child -> parent = underlying_ptr();
     }
 
     /**
      * @brief Make a node its left child
      * 
-     * Release ownership to the old left child
-     * 
      * @param child the new left child. This child can be null
-     * @return the old left child if it exists
-     *         nullptr if it doesn't
      */
-    Derived* safe_link_left_child(Derived* child) noexcept {
+    void nullable_link_left_child(Derived* child) noexcept {
         if (child) {
-            return link_left_child(child);
+            link_left_child(child);
+        } else {
+            orphan_left_child();
         }
-        return orphan_left_child();
     }
 
     /**
      * @brief Make a nonnull node its right child
-     * 
-     * Release ownership to the old right child
-     * 
-     * @param child a unique ptr to the new right child. Must be nonnull
-     * @return the old right child if it exists
-     *         nullptr if it doesn't
-     */
-    Derived* link_right_child(unique_ptr_type&& child) noexcept {
-        Derived* old_child = orphan_right_child();
-        right_child = std::move(child);
-        right_child -> parent = underlying_ptr();
-        return old_child;
-    }
-
-    /**
-     * @brief Make a node its right child
-     * 
-     * Release ownership to the old right child
-     * 
-     * @param child a unique ptr to the new right child. Can be null
-     * @return the old right child if it exists
-     *         nullptr if it doesn't
-     */
-    Derived* safe_link_right_child(unique_ptr_type&& child) noexcept {
-        if (child) {
-            return link_right_child(std::move(child));
-        }
-        return orphan_right_child();
-    }
-
-    /**
-     * @brief Make a nonnull node its right child
-     * 
-     * Release ownership to the old right child
      * 
      * @param child the new right child. Must be nonnull
-     * @return the old right child if it exists
-     *         nullptr if it doesn't
      */
-    Derived* link_right_child(Derived* child) noexcept {
-        if (child == right_child.get()) {
-            return child;
-        }
-        return link_right_child(unique_ptr_type(child, right_child.get_deleter()));
+    void link_right_child(Derived* child) noexcept {
+        right_child = child;
+        right_child -> parent = underlying_ptr();
     }
 
     /**
      * @brief Make a node its right child
      * 
-     * Release ownership to the old right child
-     * 
      * @param child the new right child. This child can be null
-     * @return the old right child if it exists
-     *         nullptr if it doesn't
      */
-    Derived* safe_link_right_child(Derived* child) noexcept {
+    void nullable_link_right_child(Derived* child) noexcept {
         if (child) {
-            return link_right_child(child);
+            link_right_child(child);
+        } else {
+            orphan_right_child();
         }
-        return orphan_right_child();
     }
 
     /**
      * @brief Set its left or right child, depending on a boolean flag
      * 
-     * Release ownership to the old child
-     * 
-     * @param child a unique pointer to the new child. Must be nonnull
+     * @param child the new child. Must be nonnull
      * @param is_left_child setting left child if true, right child otherwise
-     * @return the old child if it exists
-     *         nullptr if it doesn't
      */
-    Derived* link_child(unique_ptr_type&& child, bool is_left_child) noexcept {
+    void link_child(Derived* child, bool is_left_child) noexcept {
         if (is_left_child) {
-            return link_left_child(std::move(child));
+            link_left_child(child);
+        } else {
+            link_right_child(child);
         }
-        return link_right_child(std::move(child));
     }
 
     /**
      * @brief Set its left or right child, depending on a boolean flag
      * 
-     * Release ownership to the old child
-     * 
-     * @param child a unique pointer to the new child. Can be null
+     * @param child         the new child. Can be null
      * @param is_left_child setting left child if true, right child otherwise
-     * @return the old child if it exists
-     *         nullptr if it doesn't
      */
-    Derived* safe_link_child(unique_ptr_type&& child, bool is_left_child) noexcept {
+    void nullable_link_child(Derived* child, bool is_left_child) noexcept {
         if (!child) {
             if (is_left_child) {
-                return orphan_left_child();
+                orphan_left_child();
+            } else {
+                orphan_right_child();
             }
-            return orphan_right_child();
+        } else {
+            link_child(child, is_left_child);
         }
-        return link_child(std::move(child), is_left_child);
-    }
-
-    /**
-     * @brief Set its left or right child, depending on a boolean flag
-     * 
-     * Release ownership to the old child
-     * 
-     * @param child the old child. Must be nonnull
-     * @param is_left_child setting left child if true, right child otherwise
-     * @return the old child if it exists
-     *         nullptr if it doesn't
-     */
-    Derived* link_child(Derived* child, bool is_left_child) noexcept {
-        if (is_left_child) {
-            return link_left_child(child);
-        }
-        return link_right_child(child);
-    }
-
-    /**
-     * @brief Set its left or right child, depending on a boolean flag
-     * 
-     * Release ownership to the old child
-     * 
-     * @param child the old child. Can be null
-     * @param is_left_child setting left child if true, right child otherwise
-     * @return the old child if it exists
-     *         nullptr if it doesn't
-     */
-    Derived* safe_link_child(Derived* child, bool is_left_child) noexcept {
-        if (!child) {
-            if (is_left_child) {
-                return orphan_left_child();
-            }
-            return orphan_right_child();
-        }
-        return link_child(child, is_left_child);
     }
 
     /**
@@ -348,9 +223,9 @@ public:
      */
     Derived* orphan_self() noexcept {
         if (is_left_child()) {
-            parent -> left_child.release();
+            parent -> left_child = nullptr;
         } else {
-            parent -> right_child.release();
+            parent -> right_child = nullptr;
         }
         Derived* saved_parent = parent;
         parent = nullptr;
@@ -371,7 +246,7 @@ public:
     Derived* get_leftmost_descendant() noexcept {
         Derived* curr = underlying_ptr();
         while (curr -> left_child) {
-            curr = curr -> left_child.get();
+            curr = curr -> left_child;
         }
         return curr;
     }
@@ -382,7 +257,7 @@ public:
     Derived* get_rightmost_descendant() noexcept {
         Derived* curr = underlying_ptr();
         while (curr -> right_child) {
-            curr = curr -> right_child.get();
+            curr = curr -> right_child;
         }
         return curr;
     }
@@ -396,10 +271,12 @@ public:
         if (curr -> right_child) {
             return curr -> right_child -> get_leftmost_descendant();
         }
-        while (curr -> parent && curr -> parent -> right_child.get() == curr) {
-            curr = curr -> parent;
+        Derived* par = curr -> parent;
+        while (par != nullptr && par -> right_child == curr) {
+            curr = par;
+            par = par -> parent;
         }
-        return curr -> parent;
+        return par;
     }
 
     /**
@@ -410,17 +287,21 @@ public:
         if (curr -> left_child) {
             return curr -> left_child -> get_rightmost_descendant();
         }
-        while (curr -> parent && curr -> parent -> left_child.get() == curr) {
-            curr = curr -> parent;
+        Derived* par = curr -> parent;
+        while (par -> left_child == curr) {
+            curr = par;
+            par = par -> parent;
         }
-        return curr -> parent;
+        return par;
     }
 
     /**
      * @brief Perform a left rotation on the current node
      * 
+     * @tparam Nullable if true, it will handle nullable parent
      * @return the node in place of this node
      */
+    template <bool Nullable>
     Derived* rotate_left() noexcept {
         /*
          *     P               P
@@ -431,19 +312,25 @@ public:
          *   (3)/ \         / \(3)
          *     C   E       A   C
          */
-        Derived* original_right_child = orphan_right_child<false>();
-        Derived* right_child_left_child = original_right_child -> left_child.release();
+        Derived* original_right_child = right_child;
+        Derived* right_child_left_child = original_right_child -> left_child;
         // (1) Let right child be the new child of the parent of this node
-        // Ownership transfer. Parent releases ownership of pointer to this node
-        if (parent) {
+        if constexpr (Nullable) {
+            if (parent) {
+                parent -> link_child(original_right_child, is_left_child());
+            } else {
+                original_right_child -> parent = nullptr;
+            }
+        } else {
             parent -> link_child(original_right_child, is_left_child());
         }
         // (2) Make this node the left child of the original right child
         original_right_child -> link_left_child(underlying_ptr());
         // (3) If the original right child has a left child, 
         // make it the right child of this node
+        right_child = right_child_left_child;
         if (right_child_left_child) {
-            link_right_child(right_child_left_child);
+            right_child_left_child -> parent = underlying_ptr();
         }
         return original_right_child;
     }
@@ -451,8 +338,10 @@ public:
     /**
      * @brief Perform a right rotation on the current node
      * 
+     * @tparam Nullable if true, it will handle nullable parent
      * @return Derived* the node in place of this node
      */
+    template <bool Nullable>
     Derived* rotate_right() noexcept {
         /*
          *      P               P
@@ -463,19 +352,26 @@ public:
          *   / \(3)           (3)/ \
          *  A   C               C   E
          */
-        Derived* original_left_child = orphan_left_child<false>();
-        Derived* left_child_right_child = original_left_child -> right_child.release();
+        Derived* original_left_child = left_child;
+        Derived* left_child_right_child = original_left_child -> right_child;
         // (1) Let right child be the new child of the parent of this node
         // Ownership transfer. Parent releases ownership of pointer to this node
-        if (parent) {
+        if constexpr (Nullable) {
+            if (parent) {
+                parent -> link_child(original_left_child, is_left_child());
+            } else {
+                original_left_child -> parent = nullptr;
+            }
+        } else {
             parent -> link_child(original_left_child, is_left_child());
         }
         // (2) Make this node the left child of the original right child
         original_left_child -> link_right_child(underlying_ptr());
         // (3) If the original right child has a left child, 
         // make it the right child of this node
+        left_child = left_child_right_child;
         if (left_child_right_child) {
-            link_left_child(left_child_right_child);
+            left_child_right_child -> parent = underlying_ptr();
         }
         return original_left_child;
     }
@@ -492,8 +388,8 @@ public:
             throw;
         }
         node -> parent = nullptr;
-        new(&node -> left_child) unique_ptr_type;
-        new(&node -> right_child) unique_ptr_type;
+        node -> left_child = nullptr;
+        node -> right_child = nullptr;
         return node;
     }
 
@@ -503,8 +399,8 @@ public:
         using alloc_traits = std::allocator_traits<Allocator>;
         Derived* node = alloc_traits::allocate(allocator, 1);
         node -> parent = nullptr;
-        new(&node -> left_child) unique_ptr_type;
-        new(&node -> right_child) unique_ptr_type;
+        node -> left_child = nullptr;
+        node -> right_child = nullptr;
         return node;
     }
 
@@ -541,8 +437,8 @@ public:
             // clone it and move to the new left child
             if (original_curr -> left_child) {
                 clone_curr -> link_left_child(original_curr -> left_child -> clone(allocator));
-                original_curr = original_curr -> left_child.get();
-                clone_curr = clone_curr -> left_child.get();
+                original_curr = original_curr -> left_child;
+                clone_curr = clone_curr -> left_child;
             } else {
                 /* If the left child is nullptr, we have two cases
                  * 1. The current node has a right child:
@@ -595,8 +491,8 @@ public:
                     break;
                 }
                 clone_curr -> link_right_child(original_curr -> right_child -> clone(allocator));
-                original_curr = original_curr -> right_child.get();
-                clone_curr = clone_curr -> right_child.get();
+                original_curr = original_curr -> right_child;
+                clone_curr = clone_curr -> right_child;
             }
         }
         return clone_root;
@@ -615,12 +511,27 @@ public:
     requires std::same_as<Derived, typename Allocator::value_type>
     void deep_destroy(Allocator& allocator) {
         if (left_child) {
-            left_child.release() -> deep_destroy(allocator);
+            left_child -> deep_destroy(allocator);
         }
         if (right_child) {
-            right_child.release() -> deep_destroy(allocator);
+            right_child -> deep_destroy(allocator);
         }
         underlying_ptr() -> destroy(allocator);
+    }
+
+    template <typename Allocator>
+    requires std::same_as<Derived, typename Allocator::value_type>
+    std::size_t deep_destroy_count(Allocator& allocator) {
+        std::size_t count = 0;
+        if (left_child) {
+            count += left_child -> deep_destroy_count(allocator);
+        }
+        if (right_child) {
+            count += right_child -> deep_destroy_count(allocator);
+        }
+        underlying_ptr() -> destroy(allocator);
+        ++count;
+        return count;
     }
 
     /**

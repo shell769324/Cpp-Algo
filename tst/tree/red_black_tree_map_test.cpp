@@ -1,10 +1,9 @@
 #include "gtest/gtest.h"
-#include "tree/red_black_tree_map.h"
+#include "src/tree/red_black_tree_map.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/copy_only_constructor_stub.h"
 #include "tst/utility/move_only_constructor_stub.h"
 #include "tst/map_test.h"
-#include <iostream>
 
 namespace {
     

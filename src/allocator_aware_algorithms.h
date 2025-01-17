@@ -7,7 +7,7 @@ namespace algo {
 
 template<typename Iterator, typename Allocator>
 requires std::weakly_incrementable<Iterator> && std::indirectly_readable<Iterator> && std::equality_comparable<Iterator>
-void destroy(Iterator first, Iterator last, Allocator& allocator) {
+void destroy(Iterator first, Iterator last, Allocator& allocator) noexcept(std::is_nothrow_destructible_v<std::iter_value_t<Iterator> >) {
     using alloc_traits = std::allocator_traits<Allocator>;
     for (; first != last; ++first) {
         alloc_traits::destroy(allocator, std::addressof(*first));

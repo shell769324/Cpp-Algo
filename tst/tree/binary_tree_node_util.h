@@ -1,5 +1,5 @@
 #pragma once
-#include "tree/binary_tree_node.h"
+#include "src/tree/binary_tree_node.h"
 #include "tst/utility/constructor_stub.h"
 #include "tst/utility/tracking_allocator.h"
 
